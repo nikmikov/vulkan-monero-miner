@@ -76,8 +76,8 @@ void on_resolved_cb(uv_getaddrinfo_t *resolver, int status, struct addrinfo *res
   assert(conn->addrinfo == NULL && "Expect address is not resolved");
 
   if (status < 0) {
-	on_resolve_failed(conn, status);
-	return;
+    on_resolve_failed(conn, status);
+    return;
   }
   // success
   conn->addrinfo = res;
@@ -89,9 +89,9 @@ void on_resolved_cb(uv_getaddrinfo_t *resolver, int status, struct addrinfo *res
   int i0 = -conn->index;
   for (struct connection_data *c = &conn[i0] ; c <= conn; ++c) {
     if (ready_to_connect(c)) {
-	  connect_async(c);
-	  return;
-	}
+      connect_async(c);
+      return;
+    }
   }
   */
 
@@ -121,8 +121,8 @@ void resolve_async(struct connection_data* conn)
 
   int err_code = uv_getaddrinfo(loop, &conn->resolver, on_resolved_cb, host, port, &hints);
   if (err_code) {
-	on_resolve_failed(conn, err_code);
-	return;
+    on_resolve_failed(conn, err_code);
+    return;
   }
 }
 
@@ -131,9 +131,9 @@ void on_connect_cb(uv_connect_t* req, int status)
 {
   struct connection_data *conn = req->data;
   if (status < 0) {
-	log_error("Connection callback error %s", uv_err_name(status));
-	conn->failed_attempts++;
-	return;
+    log_error("Connection callback error %s", uv_err_name(status));
+    conn->failed_attempts++;
+    return;
   }
   conn->failed_attempts = 0; // reset failed attempts counter
 }
@@ -147,9 +147,9 @@ void connect_async(struct connection_data *conn)
   uv_tcp_init(loop, &conn->socket);
   int err_code = uv_tcp_connect(&conn->connect_req, &conn->socket, sockaddr, on_connect_cb);
   if(err_code) {
-	log_error("Error when establishing TCP connection: %s", uv_err_name(err_code));
-	conn->failed_attempts++;
-	// set retry delay
+    log_error("Error when establishing TCP connection: %s", uv_err_name(err_code));
+    conn->failed_attempts++;
+    // set retry delay
   }
 }
 
@@ -157,13 +157,13 @@ void connect_async(struct connection_data *conn)
 
 /** Initialize data structures */
 bool pool_connection_init(const struct config_pool_list* cfg,
-						  pool_connection_handle* handle_ptr)
+                          pool_connection_handle* handle_ptr)
 {
   assert(handle_ptr == NULL && "Can not initialize non-null handle");
 
   if(cfg->size == 0) {
-	log_error("No hosts configured!");
-	return false;
+    log_error("No hosts configured!");
+    return false;
   }
 
   pool_connection_handle handle = malloc(sizeof(struct pool_connection));
@@ -172,13 +172,13 @@ bool pool_connection_init(const struct config_pool_list* cfg,
   handle->data = malloc(sizeof(struct connection_data) * cfg->size);
   struct connection_data* conn = handle->data;
   for (size_t i = 0; i < handle->size; ++i, ++conn) {
-	conn->config_pool = &cfg->pools[i];  // assume config is not freed while app is running
-	conn->index = i;
-	conn->failed_attempts = 0;
-	conn->retry_delay = INITIAL_RETRY_DELAY_MILLISEC;
-	conn->addrinfo = NULL;
+    conn->config_pool = &cfg->pools[i];  // assume config is not freed while app is running
+    conn->index = i;
+    conn->failed_attempts = 0;
+    conn->retry_delay = INITIAL_RETRY_DELAY_MILLISEC;
+    conn->addrinfo = NULL;
     conn->resolver.data = conn;
-	conn->connect_req.data = conn;
+    conn->connect_req.data = conn;
   }
 
   *handle_ptr = handle;
@@ -190,7 +190,7 @@ void pool_connection_connect(pool_connection_handle handle)
 {
   struct connection_data* conn = handle->data;
   for (size_t i = 0; i < handle->size; ++i, ++conn) {
-	resolve_async(conn);
+    resolve_async(conn);
   }
 }
 

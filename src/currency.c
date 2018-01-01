@@ -25,11 +25,11 @@ const struct currency_info* currency_get_info(enum currency currency)
 bool currency_from_name(const char* str, enum currency *out)
 {
   for(size_t i = 0; i < CURRENCIES_SIZE; ++i) {
-	log_debug("Comparing: %s with %s", supported_currencies[i].name, str);
-	if (strcmp(supported_currencies[i].name, str) == 0) {
-	  *out = supported_currencies[i].currency;
-	  return true;
-	}
+    log_debug("Comparing: %s with %s", supported_currencies[i].name, str);
+    if (strcmp(supported_currencies[i].name, str) == 0) {
+      *out = supported_currencies[i].currency;
+      return true;
+    }
   }
   log_error("Unnown currency name: %s", str);
   return false;
@@ -38,10 +38,10 @@ bool currency_from_name(const char* str, enum currency *out)
 bool currency_from_code(const char* str, enum currency *out)
 {
   for(size_t i = 0; i < CURRENCIES_SIZE; ++i) {
-	if (strcmp(supported_currencies[i].code, str) == 0) {
-	  *out = supported_currencies[i].currency;
-	  return true;
-	}
+    if (strcmp(supported_currencies[i].code, str) == 0) {
+      *out = supported_currencies[i].currency;
+      return true;
+    }
   }
   log_error("Unnown currency code: %s", str);
   return false;

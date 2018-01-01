@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
   // read config
   struct config* cfg = NULL;
   if(!config_from_file(cli_opts.config_file, &cfg)) {
-	log_error("Error when reading config.");
+    log_error("Error when reading config.");
   }
 
   // instantiate pool handlers
