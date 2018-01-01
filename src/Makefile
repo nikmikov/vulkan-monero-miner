@@ -4,25 +4,28 @@ uname_M := $(shell sh -c 'uname -m 2>/dev/null || echo not')
 OPTIMIZATION?=-O2
 NODEPS:=clean distclean
 
+
 #default settings
-STD=-std=c99 -pedantic
-WARN=-Wall -W -Wno-missing-field-initializers
+STD=-std=c11 -pedantic
+WARN=-Wall -W -Wno-missing-field-initializers -Wno-gnu-zero-variadic-macro-arguments
 OPT=$(OPTIMIZATION)
+DBG=$(DEBUG)
 
 PREFIX?=/usr/local
 INSTALL_BIN=$(PREFIX)/bin
 INSTALL=install
+BUILDDIR=../build
 
-FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DEBUG) $(CFLAGS)
-FINAL_LDFLAGS=$(LDFLAGS) $(DEBUG)
+FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DBG) $(CFLAGS)
+FINAL_LDFLAGS=$(LDFLAGS) $(DBG) -luv
 FINAL_LIBS=-lm
 DEBUG=-g -ggdb
 
 ifeq ($(uname_S),Darwin)
-	# Darwin
+# Darwin
 	FINAL_LIBS+= -ldl
 else
-	# All the other OSes (notably Linux)
+# All the other OSes (notably Linux)
 	FINAL_LDFLAGS+= -rdynamic
 	FINAL_LIBS+=-ldl -pthread
 endif
@@ -31,12 +34,15 @@ DORENOM_CC=$(CC) $(FINAL_CFLAGS)
 DORENOM_LD=$(CC) $(FINAL_LDFLAGS)
 
 DORENOM_EXECUTABLE=dorenom
-DORENOM_OBJS=dorenom.o
+DORENOM_OBJS=dorenom.o cli_opts.o config.o console.o currency.o pool_connection.o cJSON/cJSON.o
 
 all: $(DORENOM_EXECUTABLE)
 .PHONY: all
 
 %.o: %.c
+	$(DORENOM_CC) -c $<
+
+cJSON/%.o: cJSON/%.c
 	$(DORENOM_CC) -c $<
 
 $(DORENOM_EXECUTABLE): $(DORENOM_OBJS)
@@ -46,13 +52,11 @@ $(DORENOM_EXECUTABLE): $(DORENOM_OBJS)
 clean:
 	$(RM) $(DORENOM_EXECUTABLE) *.o
 
-distclean: clean
-	-(cd ../deps && $(MAKE) distclean)
-	-(rm -f .make-*)
 
-.PHONY: distclean
+release:
+	$(MAKE) DEBUG="-DNDEBUG" OPTIMIZATION="-O2"
 
-noopt:
-	$(MAKE) OPTIMIZATION="-O0"
+debug:
+	$(MAKE) DEBUG="-g -ggdb" OPTIMIZATION="-O0"
 
 -include $(DEPS)
