@@ -16,7 +16,7 @@
         "pool_weight": 10
       },
       {
-        "host": "de.minexmr.com",
+        "host": "des.minexmr.com",
         "port": "80",
         "use_tls": true,
         "pool_weight": 10

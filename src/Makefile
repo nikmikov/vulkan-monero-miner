@@ -7,7 +7,7 @@ NODEPS:=clean distclean
 
 #default settings
 STD=-std=c11 -pedantic
-WARN=-Wall -W -Wno-missing-field-initializers -Wno-gnu-zero-variadic-macro-arguments
+WARN=-Wall -W
 OPT=$(OPTIMIZATION)
 DBG=$(DEBUG)
 

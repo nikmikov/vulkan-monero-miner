@@ -201,7 +201,7 @@ bool read_pool_list(const cJSON *json, struct config_pool_list* pool_list)
   }
   pool_list->pools = calloc(size, sizeof(struct config_pool));
   for (int i = 0; i < size; ++i, ++pool_list->size) {
-    log_debug("Config parse: parsing poll entry #%d", i);
+    log_debug("Config parse: parsing pool entry #%d", i);
     cJSON *pool_json = cJSON_GetArrayItem(pool_list_json, i);
     assert(pool_json != NULL);
     if (!read_pool(pool_json, &pool_list->pools[i])) {
