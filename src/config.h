@@ -47,6 +47,7 @@ struct config_miner {
     enum currency currency;
     enum stratum_protocol protocol;
     const char* wallet;
+    const char name[32];
     struct config_pool_list pool_list;
 };
 

@@ -253,10 +253,12 @@ bool config_from_json(const cJSON *json, struct config *cfg)
     if (!read_miner(miner_json, miner)) {
       return false;
     } else {
+      const char* currency_name = currency_get_info(miner->currency)->name;
+      snprintf((char*)miner->name, sizeof(miner->name), "%s~%d", currency_name, i);
 #ifndef NDEBUG
       log_debug("- miner: #%d:", i);
       log_debug("    protocol: %d", miner->protocol);
-      log_debug("    currency: %s", currency_get_info(miner->currency)->name);
+      log_debug("    currency: %s", currency_name);
       log_debug("    wallet: %s", miner->wallet);
       log_debug("    pool(%d):", miner->pool_list.size);
       for (size_t j = 0; j < miner->pool_list.size; ++j) {

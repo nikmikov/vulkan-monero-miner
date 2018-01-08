@@ -16,7 +16,7 @@ INSTALL_BIN=$(PREFIX)/bin
 INSTALL=install
 BUILDDIR=../build
 
-FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DBG) $(CFLAGS)
+FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DBG) $(CFLAGS) -I ./
 FINAL_LDFLAGS=$(LDFLAGS) $(DBG) -luv
 FINAL_LIBS=-lm
 DEBUG=-g -ggdb
@@ -34,23 +34,20 @@ DORENOM_CC=$(CC) $(FINAL_CFLAGS)
 DORENOM_LD=$(CC) $(FINAL_LDFLAGS)
 
 DORENOM_EXECUTABLE=dorenom
-DORENOM_OBJS=dorenom.o cli_opts.o config.o console.o currency.o pool_connection.o cJSON/cJSON.o
+DORENOM_OBJS=buffer.o dorenom.o cli_opts.o config.o connection.o console.o currency.o cJSON/cJSON.o miner.o monero/monero_stratum.o stratum.o
 
 all: $(DORENOM_EXECUTABLE)
 .PHONY: all
 
 %.o: %.c
-	$(DORENOM_CC) -c $<
-
-cJSON/%.o: cJSON/%.c
-	$(DORENOM_CC) -c $<
+	$(DORENOM_CC) -c $< -o $@
 
 $(DORENOM_EXECUTABLE): $(DORENOM_OBJS)
 	$(DORENOM_LD) -o $@ $^ $(FINAL_LIBS)
 
 .PHONY: clean
 clean:
-	$(RM) $(DORENOM_EXECUTABLE) *.o
+	$(RM) $(DORENOM_EXECUTABLE) $(DORENOM_OBJS)
 
 
 release:

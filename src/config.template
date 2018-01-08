@@ -1,7 +1,7 @@
 [{
     "currency": "Monero",
     "protocol": "stratum_monero",
-    "wallet":"41ssDghM2vkiyk9m6c3WgbNjBsnse8xni3o6xz2uC9eeJK9FfLebMtvQNyPLxJ8DvA1wt9Qw6ycPCZ5agXKXht1272uMYF2",
+    "wallet":"41ssDghM2vkiyk9m6c3WgbNjBsnse8xni3o6xz2uC9eeJK9FfLebMtvQNyPLxJ8DvA1wt9Qw6ycPCZ5agXKXht1272uMYF2.test",
     "pool_list": [
       {
         "host": "pool.minexmr.com",

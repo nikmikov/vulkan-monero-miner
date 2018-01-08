@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <uv.h>
@@ -6,12 +7,7 @@
 #include "config.h"
 #include "console.h"
 #include "logging.h"
-#include "pool_connection.h"
-
-
-struct status {
-  uv_timer_t timer;
-};
+#include "miner.h"
 
 
 static const char *uv_handle_type_str[] = {
@@ -45,12 +41,14 @@ void on_uv_walk(uv_handle_t* handle, void* arg)
 
 void on_sigint_received(uv_signal_t *handle, int signum)
 {
-  log_info("SIGINT received. Gracefully shutting down");
+  log_warn("SIGINT received. Gracefully shutting down");
   int result = uv_loop_close(handle->loop);
   if (result == UV_EBUSY) {
     log_debug("Closing active event handles");
     uv_walk(handle->loop, on_uv_walk, NULL);
   }
+  //uv_print_all_handles(uv_default_loop(), stdout);
+  uv_stop(uv_default_loop());
 }
 
 int main(int argc, char **argv) {
@@ -69,6 +67,18 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
+  assert(cfg->size > 0);
+
+  int exit_code = 0;
+  miner_handle *miners = calloc(cfg->size, sizeof(miner_handle));
+  for(size_t i = 0; i < cfg->size; ++i) {
+    miners[i] = miner_init(&cfg->miners[i]);
+    if(miners[i] == NULL) {
+      exit_code = 1;
+      goto SHUTDOWN;
+    }
+  }
+
   uv_loop_t *loop = uv_default_loop();
   // install sigint handler
   uv_signal_t sigint;
@@ -76,31 +86,32 @@ int main(int argc, char **argv) {
   uv_signal_start(&sigint, on_sigint_received, SIGINT);
   uv_unref((uv_handle_t*)&sigint);
 
+
   // instantiate pool handlers
-  pool_connection_handle h = NULL;
+  /*pool_connection_handle h = NULL;
   if(!pool_connection_init(&cfg->miners[0].pool_list, &h)) {
     log_error("Connection init failed");
     exit(1);
   }
 
+  pool_connection_connect(h);*/
 
-  pool_connection_connect(h);
+  for(size_t i = 0; i < cfg->size; ++i) {
+    miner_start(miners[i]);
+  }
 
-
-  // start main loop
-  //  struct status st;
-
-
-  //uv_timer_init(loop, &st.timer);
-  //uv_timer_start(&st.timer, update_status_cb, 0, 2000);
-
+  log_debug("Starting event loop");
   uv_run(loop, UV_RUN_DEFAULT);
-  printf("Now quitting.\n");
-  pool_connection_free(h);
-
-  //uv_loop_close(loop);
-
+ SHUTDOWN:
+  log_debug("Shutting down.");
+  for(size_t i = 0; i < cfg->size; ++i) {
+    if(miners[i]) {
+      miner_stop(miners[i]);
+      miner_free(&miners[i]);
+    }
+  }
+  free(miners);
   config_free(cfg);
 
-  return 0;
+  return exit_code;
 }
