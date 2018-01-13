@@ -15,22 +15,31 @@ struct miner {
   struct stratum_event_handler stratum_event_handler;
 };
 
-void on_stratum_event(enum stratum_event_type event,
-                      stratum_payload_handle payload,
+void on_stratum_event(const struct stratum_event *event,
                       void *data)
 {
   struct miner *miner = data;
   assert(miner != NULL);
-  assert(payload != NULL);
-  switch(event) {
-  case STRATUM_EVENT_LOGIN_RESULT:
-    log_debug("Login result event: %s", miner->cfg->name);
+  assert(event != NULL);
+  switch(event->event_type) {
+  case STRATUM_EVENT_INVALID_REPLY: {
+    const char *err = ((const struct stratum_event_invalid_reply*)event)->error;
+    log_error("%s: Invalid reply d: %s, error: %s", miner->cfg->name, err);
+    break;
+  }
+  case STRATUM_EVENT_LOGIN_FAILED: {
+    const char *err = ((const struct stratum_event_login_failed*)event)->error;
+    log_error("%s: Login failed. Error: %s", miner->cfg->name, err);
+    break;
+  }
+  case STRATUM_EVENT_LOGIN_SUCCESS:
+    log_debug("%s: Login result event", miner->cfg->name);
     break;
   case STRATUM_EVENT_NEW_JOB:
-    log_debug("New job event: %s", miner->cfg->name);
+    log_debug("%s: New job event", miner->cfg->name);
     break;
   default:
-    log_error("Invalid stratum event type: %d", event);
+    log_error("Invalid stratum event type: %d", event->event_type);
     assert(false);
   }
 }
@@ -47,8 +56,12 @@ void on_connection_event(enum connection_event_type event, const uv_buf_t *event
     break;
   case CONNECTION_EVENT_DATA:
     log_debug("%s: connection DATA", miner->cfg->name);
-    miner->stratum->new_payload(miner->stratum, event_data);
     assert(event_data != NULL);
+    assert(miner->stratum->new_payload != NULL);
+    if(event_data->len > 0) {
+      miner->stratum->new_payload(miner->stratum, event_data);
+    }
+    break;
   default:
     log_error("Invalid connection event type: %d", event);
     assert(false);

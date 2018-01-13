@@ -2,19 +2,14 @@
     "currency": "Monero",
     "protocol": "stratum_monero",
     "wallet":"41ssDghM2vkiyk9m6c3WgbNjBsnse8xni3o6xz2uC9eeJK9FfLebMtvQNyPLxJ8DvA1wt9Qw6ycPCZ5agXKXht1272uMYF2.test",
+    "password": "",
     "pool_list": [
       {
-        "host": "mine.xmrpool.net",
+        "host": "xmr-usa.dwarfpool.com",
         "port": "80",
         "use_tls": false,
         "password": "test_user@gmail.com",
         "pool_weight": 999
-      },
-      {
-        "host": "des.minexmr.com",
-        "port": "80",
-        "use_tls": true,
-        "pool_weight": 10
       }
     ]
 }]

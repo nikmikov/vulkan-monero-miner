@@ -14,16 +14,33 @@
 
 enum stratum_event_type {
     STRATUM_EVENT_NOEVENT = 0,
-    STRATUM_EVENT_LOGIN_RESULT,
+    STRATUM_EVENT_INVALID_REPLY,
+    STRATUM_EVENT_LOGIN_SUCCESS,
+    STRATUM_EVENT_LOGIN_FAILED,
     STRATUM_EVENT_NEW_JOB
 };
 
-struct stratum_payload;
+struct stratum_event {
+    enum stratum_event_type event_type;
+};
+
+struct stratum_event_invalid_reply {
+    struct stratum_event stratum_event;
+    const char *error;
+};
+
+struct stratum_event_login_success {
+    struct stratum_event stratum_event;
+};
+
+struct stratum_event_login_failed {
+    struct stratum_event stratum_event;
+    const char *error;
+};
+
 struct stratum_event_handler;
 
-
 typedef struct stratum* stratum_handle;
-typedef struct stratum_payload* stratum_payload_handle;
 
 struct stratum {
     enum stratum_protocol protocol;
@@ -33,11 +50,8 @@ struct stratum {
     void (*new_payload)(stratum_handle, const uv_buf_t *buf);
 };
 
-
-
 /** Handle server commands */
-typedef void (*stratum_event_cb)(enum stratum_event_type event,
-                                 stratum_payload_handle payload,
+typedef void (*stratum_event_cb)(const struct stratum_event *event,
                                  void *data);
 
 struct stratum_event_handler {

@@ -77,7 +77,7 @@ bool read_bool_from_json(const cJSON *json, const char *field, bool *out)
   return true;
 }
 
-/** Get a string field from json, return NULL if field does not exists
+/** Get a string field from json, return NULL if the field does not exists
  */
 const char* get_string_from_json(const cJSON *json, const char *field)
 {
@@ -94,7 +94,7 @@ const char* get_string_from_json(const cJSON *json, const char *field)
   return item->valuestring;
 }
 
-/** Get a string field from json, return NULL if field does not exists
+/** Get array field from json, return NULL if the field does not exists
  */
 const cJSON* get_array_from_json(const cJSON *json, const char *field)
 {
@@ -109,21 +109,6 @@ const cJSON* get_array_from_json(const cJSON *json, const char *field)
   }
 
   return item;
-}
-
-/** Copy a string field from json into newly allocated string and return pointer to the
- *  allocated string or NULL if fields does not exist
- */
-char* copy_string_from_json(const cJSON *json, const char *field)
-{
-  const char *str = get_string_from_json(json, field);
-  if(str == NULL)  {
-    return NULL;
-  }
-  size_t sz = strlen(str);
-  char *str_copy = calloc(sz + 1, sizeof(char));
-  memcpy(str_copy, str, sz);
-  return str_copy;
 }
 
 /** Read "currency" field from json
@@ -153,11 +138,24 @@ bool read_protocol(const cJSON *json, enum stratum_protocol *protocol_ptr)
 bool read_wallet(const cJSON *json, const char **wallet_address_ptr)
 {
   assert(*wallet_address_ptr == NULL);
-  char *wallet_str = copy_string_from_json(json, "wallet");
+  char *wallet_str = get_string_from_json(json, "wallet");
   if(wallet_str == NULL)  {
     return false;
   }
-  *wallet_address_ptr = wallet_str;
+  *wallet_address_ptr = strdup(wallet_str);
+  return true;
+}
+
+/** Read "password" field from json.
+ */
+bool read_password(const cJSON *json, const char **password_address_ptr)
+{
+  assert(*password_address_ptr == NULL);
+  char *password_str = get_string_from_json(json, "password");
+  if(password_str == NULL)  {
+    return false;
+  }
+  *password_address_ptr = strdup(password_str);
   return true;
 }
 
@@ -171,17 +169,17 @@ bool read_pool(const cJSON *json, struct config_pool* pool)
     return false;
   }
 
-  char* host = copy_string_from_json(json, "host");
+  char* host = get_string_from_json(json, "host");
   if(host == NULL)  {
     return false;
   }
-  char* port = copy_string_from_json(json, "port");
+
+  char* port = get_string_from_json(json, "port");
   if (port == NULL) {
-    free(host);
     return false;
   }
-  pool->host = host;
-  pool->port = port;
+  pool->host = strdup(host);
+  pool->port = strdup(port);
   return true;
 }
 
@@ -223,6 +221,7 @@ bool read_miner(const cJSON *json, struct config_miner *cfg)
   return read_currency(json, &cfg->currency)
     && read_protocol(json, &cfg->protocol)
     && read_wallet(json, &cfg->wallet)
+    && read_password(json, &cfg->password)
     && read_pool_list(json, &cfg->pool_list);
 }
 
@@ -260,6 +259,7 @@ bool config_from_json(const cJSON *json, struct config *cfg)
       log_debug("    protocol: %d", miner->protocol);
       log_debug("    currency: %s", currency_name);
       log_debug("    wallet: %s", miner->wallet);
+      log_debug("    password: %s", miner->password);
       log_debug("    pool(%d):", miner->pool_list.size);
       for (size_t j = 0; j < miner->pool_list.size; ++j) {
         const struct config_pool *pool = &miner->pool_list.pools[j];

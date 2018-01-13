@@ -6,13 +6,11 @@
 #include "monero/monero_stratum.h"
 
 
-
-
 stratum_handle stratum_new(const struct config_miner *cfg)
 {
   switch(cfg->protocol) {
   case STRATUM_PROTOCOL_MONERO:
-    return (stratum_handle)monero_stratum_new(cfg->wallet, NULL);
+    return (stratum_handle)monero_stratum_new(cfg->wallet, cfg->password);
   default:
     log_error("Unsupported stratum protocol: %d", cfg->protocol);
     assert(false);

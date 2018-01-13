@@ -1,6 +1,7 @@
 #include "console.h"
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
 
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
@@ -18,11 +19,11 @@
 #define DEBUG_PREFIX ANSI_COLOR_LIGHT_YELLOW "DEBUG" ANSI_COLOR_RESET ": "
 
 
-void console_init(const struct console_config* cfg) {
+void console_init(const struct console_config *cfg) {
 
 }
 
-void console_log(enum log_level log_level, const char* fmt, ...) {
+void console_log(enum log_level log_level, const char *logger_name, const char *fmt, ...) {
   switch(log_level) {
   case DEBUG:
     fprintf(stderr, DEBUG_PREFIX);
@@ -37,9 +38,13 @@ void console_log(enum log_level log_level, const char* fmt, ...) {
     fprintf(stderr, ERROR_PREFIX);
     break;
   }
+
+  fprintf(stderr, "%s: ", logger_name);
   va_list vargs;
   va_start(vargs, fmt);
   vfprintf(stderr, fmt, vargs);
-  fprintf(stderr, "\n");
+  if(fmt[strlen(fmt)-1] != '\n') {
+    putc('\n', stderr);
+  }
   va_end(vargs);
 }

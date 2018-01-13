@@ -159,6 +159,7 @@ void on_write(uv_write_t *req, int status)
   if(status < 0) {
     log_error("Error writing to socket; %s", uv_strerror(status));
   }
+  log_debug("Writing to socket. Complete");
   write_req_t *wr = (write_req_t*) req;
   free(wr->buf.base);
   free(wr);
@@ -373,7 +374,7 @@ void connection_write(connection_handle handle, uv_buf_t data)
   uv_stream_t *s = (uv_stream_t*)&handle->active->socket;
   write_req_t *req = calloc(1, sizeof(write_req_t));
   req->buf = data;
-
+  log_debug("Writing to socket");
   uv_write((uv_write_t*)req, s, &req->buf, 1, on_write);
 }
 

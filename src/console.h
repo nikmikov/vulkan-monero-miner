@@ -16,6 +16,6 @@ struct console_config{
 };
 
 void console_init(const struct console_config*);
-void console_log(enum log_level, const char *format, ...);
+void console_log(enum log_level, const char *logger_name, const char *format, ...);
 
 #endif /** CONSOLE_H */
