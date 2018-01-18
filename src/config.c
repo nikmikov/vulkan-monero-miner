@@ -138,7 +138,7 @@ bool read_protocol(const cJSON *json, enum stratum_protocol *protocol_ptr)
 bool read_wallet(const cJSON *json, const char **wallet_address_ptr)
 {
   assert(*wallet_address_ptr == NULL);
-  char *wallet_str = get_string_from_json(json, "wallet");
+  const char *wallet_str = get_string_from_json(json, "wallet");
   if(wallet_str == NULL)  {
     return false;
   }
@@ -151,7 +151,7 @@ bool read_wallet(const cJSON *json, const char **wallet_address_ptr)
 bool read_password(const cJSON *json, const char **password_address_ptr)
 {
   assert(*password_address_ptr == NULL);
-  char *password_str = get_string_from_json(json, "password");
+  const char *password_str = get_string_from_json(json, "password");
   if(password_str == NULL)  {
     return false;
   }
@@ -169,12 +169,12 @@ bool read_pool(const cJSON *json, struct config_pool* pool)
     return false;
   }
 
-  char* host = get_string_from_json(json, "host");
+  const char* host = get_string_from_json(json, "host");
   if(host == NULL)  {
     return false;
   }
 
-  char* port = get_string_from_json(json, "port");
+  const char* port = get_string_from_json(json, "port");
   if (port == NULL) {
     return false;
   }
@@ -330,6 +330,9 @@ void config_miner_free(struct config_miner *miner)
   assert(miner != NULL);
   if(miner->wallet) {
     free((void*)miner->wallet);
+  }
+  if(miner->password) {
+    free((void*)miner->password);
   }
   if (miner->pool_list.pools != NULL) {
     for(size_t i = 0; i < miner->pool_list.size; ++i) {

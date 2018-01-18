@@ -38,6 +38,11 @@ struct stratum_event_login_failed {
     const char *error;
 };
 
+struct stratum_event_new_job {
+    struct stratum_event stratum_event;
+    void *job_data;
+};
+
 struct stratum_event_handler;
 
 typedef struct stratum* stratum_handle;

@@ -27,6 +27,14 @@ struct monero_stratum {
   struct stratum_event_handler *stratum_event_handler;
 };
 
+struct monero_job {
+  const char *job_id;
+  const char *blob;
+  const char *target;
+};
+
+/*===================== Utility Functions ======================== */
+
 static inline monero_stratum_handle to_monero_stratum_handle(stratum_handle h)
 {
   assert( h!= NULL);
@@ -34,7 +42,6 @@ static inline monero_stratum_handle to_monero_stratum_handle(stratum_handle h)
   return (monero_stratum_handle)h;
 }
 
-/*===================== Utility Functions ======================== */
 static inline const char* json_status_string(const cJSON *json)
 {
   assert(json != NULL);
@@ -54,15 +61,49 @@ static inline bool json_status_is_ok(const cJSON *json)
   return strcmp(status, "OK") == 0;
 }
 
-/*============== Json Response Handling Functions ================ */
+const char* get_job_string_field(const cJSON *json,
+                                  const char *field,
+                                  struct stratum_event_handler *event_handler)
+{
+  char err_buf[1024] = {0};
+  if(!cJSON_HasObjectItem(json, field)) {
+    snprintf(err_buf, 1024, "Unable parse job: field \"%s\" is missing", field);
+  } else {
+    cJSON *item = cJSON_GetObjectItem(json, field);
+    if(!cJSON_IsString(item)) {
+      snprintf(err_buf, 1024, "Unable parse job: field \"%s\" is not a string", field);
+    } else {
+      return item->valuestring;
+    }
+  }
+  // error
+  assert(err_buf[0] != 0);
+  struct stratum_event_invalid_reply event = {
+    .stratum_event = {STRATUM_EVENT_INVALID_REPLY},
+    .error = err_buf
+  };
+  event_handler->cb(&event.stratum_event,event_handler->data);
+  return NULL;
+}
+
+/*========================= Json Response Handling Functions =================================== */
 void monero_stratum_handle_json_job(const cJSON *json,
                                     struct stratum_event_handler *event_handler)
 {
   log_debug("Processing new job");
-  cJSON *blob_json = cJSON_GetObjectItem(json, "blob");
-  cJSON *job_id_json = cJSON_GetObjectItem(json, "job_id");
-  cJSON *target_json = cJSON_GetObjectItem(json, "target");
+  const char *blob, *job_id, *target;
+  if((job_id = get_job_string_field(json, "job_id", event_handler)) == NULL) return;
+  if((blob = get_job_string_field(json, "blob", event_handler)) == NULL) return;
+  if((target = get_job_string_field(json, "target", event_handler)) == NULL) return;
 
+  struct monero_job job = { job_id, blob, target };
+
+  struct stratum_event_new_job event = {
+    .stratum_event = {STRATUM_EVENT_NEW_JOB},
+    .job_data = &job
+  };
+
+  event_handler->cb(&event.stratum_event,event_handler->data);
 }
 
 void monero_stratum_handle_json_login_response(const cJSON *json,
@@ -77,7 +118,6 @@ void monero_stratum_handle_json_login_response(const cJSON *json,
       .stratum_event = {STRATUM_EVENT_LOGIN_FAILED},
       .error = err_msg
     };
-    log_debug("Sending STRATUM_EVENT_LOGIN_FAILED to stratum event handler");
     event_handler->cb(&event.stratum_event, event_handler->data);
   } else if(!json_status_is_ok(json)) {
     struct stratum_event_login_failed event = {
