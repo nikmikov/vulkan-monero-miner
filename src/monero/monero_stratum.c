@@ -12,6 +12,7 @@
 #include "config.h"
 
 #include "logging.h"
+#include "monero/monero_job.h"
 #include "stratum.h"
 #include "version.h"
 
@@ -26,12 +27,6 @@ struct monero_stratum {
   const char *login;
   const char *password;
   struct stratum_event_handler *stratum_event_handler;
-};
-
-struct monero_job {
-  const char *job_id;
-  const char *blob;
-  const char *target;
 };
 
 /*===================== Utility Functions ======================== */

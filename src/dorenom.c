@@ -6,8 +6,8 @@
 #include "cli_opts.h"
 #include "config.h"
 #include "console.h"
+#include "foreman.h"
 #include "logging.h"
-#include "miner.h"
 
 
 static const char *uv_handle_type_str[] = {
@@ -70,10 +70,10 @@ int main(int argc, char **argv) {
   assert(cfg->size > 0);
 
   int exit_code = 0;
-  miner_handle *miners = calloc(cfg->size, sizeof(miner_handle));
+  foreman_handle *foremans = calloc(cfg->size, sizeof(foreman_handle));
   for(size_t i = 0; i < cfg->size; ++i) {
-    miners[i] = miner_init(&cfg->miners[i]);
-    if(miners[i] == NULL) {
+    foremans[i] = foreman_init(&cfg->miners[i]);
+    if(foremans[i] == NULL) {
       exit_code = 1;
       goto SHUTDOWN;
     }
@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
 
   // instantiate pool handlers
   /*pool_connection_handle h = NULL;
-  if(!pool_connection_init(&cfg->miners[0].pool_list, &h)) {
+  if(!pool_connection_init(&cfg->foremans[0].pool_list, &h)) {
     log_error("Connection init failed");
     exit(1);
   }
@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
   pool_connection_connect(h);*/
 
   for(size_t i = 0; i < cfg->size; ++i) {
-    miner_start(miners[i]);
+    foreman_start(foremans[i]);
   }
 
   log_debug("Starting event loop");
@@ -105,12 +105,12 @@ int main(int argc, char **argv) {
  SHUTDOWN:
   log_debug("Shutting down.");
   for(size_t i = 0; i < cfg->size; ++i) {
-    if(miners[i]) {
-      miner_stop(miners[i]);
-      miner_free(&miners[i]);
+    if(foremans[i]) {
+      foreman_stop(foremans[i]);
+      foreman_free(&foremans[i]);
     }
   }
-  free(miners);
+  free(foremans);
   config_free(cfg);
 
   return exit_code;
