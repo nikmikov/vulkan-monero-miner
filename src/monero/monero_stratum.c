@@ -15,6 +15,7 @@
 #include "stratum.h"
 #include "version.h"
 
+// json-rpc server response identifier
 enum monero_stratum_message_type {
   MONERO_STRATUM_MESSAGE_TYPE_LOGIN = 1,
 
@@ -96,7 +97,7 @@ void monero_stratum_handle_json_job(const cJSON *json,
   if((blob = get_job_string_field(json, "blob", event_handler)) == NULL) return;
   if((target = get_job_string_field(json, "target", event_handler)) == NULL) return;
 
-  struct monero_job job = { job_id, blob, target };
+  struct monero_job job = { .job_id = job_id, .blob = blob, .target = target };
 
   struct stratum_event_new_job event = {
     .stratum_event = {STRATUM_EVENT_NEW_JOB},

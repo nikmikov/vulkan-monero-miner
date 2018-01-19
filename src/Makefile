@@ -34,7 +34,7 @@ DORENOM_CC=$(CC) $(FINAL_CFLAGS)
 DORENOM_LD=$(CC) $(FINAL_LDFLAGS)
 
 DORENOM_EXECUTABLE=dorenom
-DORENOM_OBJS=buffer.o dorenom.o cli_opts.o config.o connection.o console.o currency.o cJSON/cJSON.o miner.o monero/monero_stratum.o stratum.o
+DORENOM_OBJS=buffer.o dorenom.o cli_opts.o config.o connection.o console.o currency.o cJSON/cJSON.o miner.o monero/monero_stratum.o monero/monero_worker.o stratum.o worker.o
 
 all: $(DORENOM_EXECUTABLE)
 .PHONY: all

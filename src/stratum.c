@@ -30,5 +30,4 @@ void stratum_free(stratum_handle *stratum)
     log_error("Unsupported stratum protocol: %d", protocol);
     assert(false);
   }
-
 }

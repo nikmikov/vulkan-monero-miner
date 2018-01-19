@@ -6,6 +6,7 @@
 #include "logging.h"
 #include "connection.h"
 #include "stratum.h"
+#include "worker.h"
 
 struct miner {
   const struct config_miner *cfg;
@@ -13,10 +14,16 @@ struct miner {
   struct connection_event_handler connection_event_handler;
   stratum_handle stratum;
   struct stratum_event_handler stratum_event_handler;
+  worker_handle worker;
+  struct worker_event_handler worker_event_handler;
 };
 
-void on_stratum_event(const struct stratum_event *event,
-                      void *data)
+void on_worker_event(const struct worker_event *event, void *data)
+{
+
+}
+
+void on_stratum_event(const struct stratum_event *event, void *data)
 {
   struct miner *miner = data;
   assert(miner != NULL);
@@ -32,12 +39,16 @@ void on_stratum_event(const struct stratum_event *event,
     log_error("%s: Login failed. Error: %s", miner->cfg->name, err);
     break;
   }
-  case STRATUM_EVENT_LOGIN_SUCCESS:
+  case STRATUM_EVENT_LOGIN_SUCCESS: {
     log_debug("%s: Login result event", miner->cfg->name);
     break;
-  case STRATUM_EVENT_NEW_JOB:
+  }
+  case STRATUM_EVENT_NEW_JOB: {
     log_debug("%s: New job event", miner->cfg->name);
+    void *job_data = ((struct stratum_event_new_job*)event)->job_data;
+    miner->worker->new_job(miner->worker, job_data, &miner->worker_event_handler);
     break;
+  }
   default:
     log_error("Invalid stratum event type: %d", event->event_type);
     assert(false);
@@ -84,6 +95,14 @@ miner_handle miner_init(const struct config_miner *cfg)
     return NULL;
   }
 
+  worker_handle worker = worker_new(cfg);
+  if(worker == NULL) {
+    log_error("Failed initialize worker");
+    connection_free(&pool_connection);
+    stratum_free(&stratum);
+    return NULL;
+  }
+
   struct miner *miner = calloc(1, sizeof(struct miner));
   miner->cfg = cfg;
   miner->connection = pool_connection;
@@ -93,6 +112,10 @@ miner_handle miner_init(const struct config_miner *cfg)
   miner->stratum_event_handler.data = miner;
   miner->stratum_event_handler.cb = on_stratum_event;
   miner->stratum = stratum;
+
+  miner->worker_event_handler.data = miner;
+  miner->worker_event_handler.cb = on_worker_event;
+  miner->worker = worker;
 
   return miner;
 }
@@ -116,8 +139,11 @@ void miner_stop(miner_handle miner)
 void miner_free(miner_handle *miner_ptr)
 {
   assert(*miner_ptr != NULL);
-  connection_free(&(*miner_ptr)->connection);
-  stratum_free(&(*miner_ptr)->stratum);
-  free(*miner_ptr);
+  struct miner *miner = *miner_ptr;
+  connection_free(&miner->connection);
+  stratum_free(&miner->stratum);
+  assert(miner->worker->free != NULL);
+  miner->worker->free(&miner->worker);
+  free(miner);
   *miner_ptr = NULL;
 }
