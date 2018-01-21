@@ -41,6 +41,7 @@
 #include <float.h>
 #include <limits.h>
 #include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -57,10 +58,6 @@
 #endif
 
 #include "cJSON.h"
-
-/* define our own boolean type */
-#define true((cJSON_bool)1)
-#define false((cJSON_bool)0)
 
 typedef struct {
   const unsigned char *json;
