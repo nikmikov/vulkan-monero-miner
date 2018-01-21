@@ -3,11 +3,10 @@
 #include <assert.h>
 #include <stdlib.h>
 
-#include "logging.h"
 #include "connection.h"
+#include "logging.h"
 #include "miner.h"
 #include "stratum.h"
-
 
 struct foreman {
   const struct config_miner *cfg;
@@ -24,10 +23,11 @@ void on_miner_event(const struct miner_event *event, void *data)
   struct foreman *foreman = data;
   assert(foreman != NULL);
   assert(event != NULL);
-  switch(event->event_type) {
+  switch (event->event_type) {
   case MINER_EVENT_RESULT_FOUND:
     log_info("Result found!");
-    foreman->stratum->submit(foreman->stratum, ((struct miner_event_result_found*)event)->data);
+    foreman->stratum->submit(foreman->stratum,
+                             ((struct miner_event_result_found *)event)->data);
     break;
   case MINER_EVENT_SEARCH_SPACE_EXHAUSTED:
     log_info("Search space exhausted!");
@@ -43,14 +43,15 @@ void on_stratum_event(const struct stratum_event *event, void *data)
   struct foreman *foreman = data;
   assert(foreman != NULL);
   assert(event != NULL);
-  switch(event->event_type) {
+  switch (event->event_type) {
   case STRATUM_EVENT_INVALID_REPLY: {
-    const char *err = ((const struct stratum_event_invalid_reply*)event)->error;
+    const char *err =
+        ((const struct stratum_event_invalid_reply *)event)->error;
     log_error("%s: Invalid reply d: %s, error: %s", foreman->cfg->name, err);
     break;
   }
   case STRATUM_EVENT_LOGIN_FAILED: {
-    const char *err = ((const struct stratum_event_login_failed*)event)->error;
+    const char *err = ((const struct stratum_event_login_failed *)event)->error;
     log_error("%s: Login failed. Error: %s", foreman->cfg->name, err);
     break;
   }
@@ -60,8 +61,9 @@ void on_stratum_event(const struct stratum_event *event, void *data)
   }
   case STRATUM_EVENT_NEW_JOB: {
     log_debug("%s: New job event", foreman->cfg->name);
-    void *job_data = ((struct stratum_event_new_job*)event)->job_data;
-    foreman->miner->new_job(foreman->miner, job_data, &foreman->miner_event_handler);
+    void *job_data = ((struct stratum_event_new_job *)event)->job_data;
+    foreman->miner->new_job(foreman->miner, job_data,
+                            &foreman->miner_event_handler);
     break;
   }
   default:
@@ -70,21 +72,23 @@ void on_stratum_event(const struct stratum_event *event, void *data)
   }
 }
 
-void on_connection_event(enum connection_event_type event, const uv_buf_t *event_data, void *data)
+void on_connection_event(enum connection_event_type event,
+                         const uv_buf_t *event_data, void *data)
 {
   struct foreman *foreman = data;
-  switch(event) {
+  switch (event) {
   case CONNECTION_EVENT_CONNECTED:
     log_debug("%s: connection CONNECTED", foreman->cfg->name);
     assert(event_data == NULL);
     assert(foreman->stratum->login != NULL);
-    foreman->stratum->login(foreman->stratum, foreman->connection, &foreman->stratum_event_handler);
+    foreman->stratum->login(foreman->stratum, foreman->connection,
+                            &foreman->stratum_event_handler);
     break;
   case CONNECTION_EVENT_DATA:
     log_debug("%s: connection DATA", foreman->cfg->name);
     assert(event_data != NULL);
     assert(foreman->stratum->new_payload != NULL);
-    if(event_data->len > 0) {
+    if (event_data->len > 0) {
       foreman->stratum->new_payload(foreman->stratum, event_data);
     }
     break;
@@ -104,14 +108,14 @@ foreman_handle foreman_init(const struct config_miner *cfg)
   }
 
   stratum_handle stratum = stratum_new(cfg);
-  if(stratum == NULL) {
+  if (stratum == NULL) {
     log_error("Failed initialize stratum");
     connection_free(&pool_connection);
     return NULL;
   }
 
   miner_handle miner = miner_new(cfg);
-  if(miner == NULL) {
+  if (miner == NULL) {
     log_error("Failed initialize miner");
     connection_free(&pool_connection);
     stratum_free(&stratum);

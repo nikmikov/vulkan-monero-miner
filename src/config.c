@@ -1,18 +1,17 @@
 #include "config.h"
 
 #include <assert.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "logging.h"
 
 #include "cJSON/cJSON.h"
 
-
 bool stratum_protocol_from_string(const char *str, enum stratum_protocol *out)
 {
-  if(strcmp(str, "stratum-ethereum") == 0) {
+  if (strcmp(str, "stratum-ethereum") == 0) {
     *out = STRATUM_PROTOCOL_ETHEREUM;
     return true;
   } else if (strcmp(str, "stratum-monero")) {
@@ -27,30 +26,31 @@ bool stratum_protocol_from_string(const char *str, enum stratum_protocol *out)
   }
 }
 
-/** Read file into char* array. Caller is responsible of freeing the allocated memory
+/** Read file into char* array. Caller is responsible of freeing the allocated
+ * memory
  */
-char* read_text_file(const char *filename)
+char *read_text_file(const char *filename)
 {
-  FILE *fp = fopen (filename, "r");
-  if(!fp) {
+  FILE *fp = fopen(filename, "r");
+  if (!fp) {
     log_error("Unable to open file: %s", filename);
     return NULL;
   }
-  fseek(fp , 0L, SEEK_END);
+  fseek(fp, 0L, SEEK_END);
 
   size_t size_bytes = (size_t)ftell(fp);
   rewind(fp);
 
   char *buffer = calloc(size_bytes + 1, sizeof(char));
-  if(!buffer) {
+  if (!buffer) {
     log_error("Memory allocation of %d bytes failed", size_bytes);
     fclose(fp);
     return NULL;
   }
 
-  size_t bytes_read = fread(buffer, 1, size_bytes,  fp);
+  size_t bytes_read = fread(buffer, 1, size_bytes, fp);
   fclose(fp);
-  if(bytes_read != size_bytes) {
+  if (bytes_read != size_bytes) {
     log_error("Error reading form %s, expected read %d bytes, but got %d",
               filename, size_bytes, bytes_read);
     free(buffer);
@@ -63,12 +63,12 @@ char* read_text_file(const char *filename)
  */
 bool read_bool_from_json(const cJSON *json, const char *field, bool *out)
 {
-  if(!cJSON_HasObjectItem(json, field)) {
+  if (!cJSON_HasObjectItem(json, field)) {
     log_error("Field \"%s\" not found", field);
     return false;
   }
   cJSON *item = cJSON_GetObjectItem(json, field);
-  if(!cJSON_IsBool(item)) {
+  if (!cJSON_IsBool(item)) {
     log_error("Field \"%s\" is not a boolean", field);
     return false;
   }
@@ -79,14 +79,14 @@ bool read_bool_from_json(const cJSON *json, const char *field, bool *out)
 
 /** Get a string field from json, return NULL if the field does not exists
  */
-const char* get_string_from_json(const cJSON *json, const char *field)
+const char *get_string_from_json(const cJSON *json, const char *field)
 {
-  if(!cJSON_HasObjectItem(json, field)) {
+  if (!cJSON_HasObjectItem(json, field)) {
     log_error("Field \"%s\" not found", field);
     return NULL;
   }
   cJSON *item = cJSON_GetObjectItem(json, field);
-  if(!cJSON_IsString(item)) {
+  if (!cJSON_IsString(item)) {
     log_error("Field \"%s\" is not a string", field);
     return NULL;
   }
@@ -96,14 +96,14 @@ const char* get_string_from_json(const cJSON *json, const char *field)
 
 /** Get array field from json, return NULL if the field does not exists
  */
-const cJSON* get_array_from_json(const cJSON *json, const char *field)
+const cJSON *get_array_from_json(const cJSON *json, const char *field)
 {
-  if(!cJSON_HasObjectItem(json, field)) {
+  if (!cJSON_HasObjectItem(json, field)) {
     log_error("Field \"%s\" not found", field);
     return NULL;
   }
   cJSON *item = cJSON_GetObjectItem(json, field);
-  if(!cJSON_IsArray(item)) {
+  if (!cJSON_IsArray(item)) {
     log_error("Field \"%s\" is not an array", field);
     return NULL;
   }
@@ -116,7 +116,7 @@ const cJSON* get_array_from_json(const cJSON *json, const char *field)
 bool read_currency(const cJSON *json, enum currency *currency_ptr)
 {
   const char *currency_str = get_string_from_json(json, "currency");
-  if(currency_str == NULL)  {
+  if (currency_str == NULL) {
     return false;
   }
   return currency_from_name(currency_str, currency_ptr);
@@ -127,7 +127,7 @@ bool read_currency(const cJSON *json, enum currency *currency_ptr)
 bool read_protocol(const cJSON *json, enum stratum_protocol *protocol_ptr)
 {
   const char *protocol_str = get_string_from_json(json, "protocol");
-  if(protocol_str == NULL)  {
+  if (protocol_str == NULL) {
     return false;
   }
   return stratum_protocol_from_string(protocol_str, protocol_ptr);
@@ -139,7 +139,7 @@ bool read_wallet(const cJSON *json, const char **wallet_address_ptr)
 {
   assert(*wallet_address_ptr == NULL);
   const char *wallet_str = get_string_from_json(json, "wallet");
-  if(wallet_str == NULL)  {
+  if (wallet_str == NULL) {
     return false;
   }
   *wallet_address_ptr = strdup(wallet_str);
@@ -152,7 +152,7 @@ bool read_password(const cJSON *json, const char **password_address_ptr)
 {
   assert(*password_address_ptr == NULL);
   const char *password_str = get_string_from_json(json, "password");
-  if(password_str == NULL)  {
+  if (password_str == NULL) {
     return false;
   }
   *password_address_ptr = strdup(password_str);
@@ -161,20 +161,20 @@ bool read_password(const cJSON *json, const char **password_address_ptr)
 
 /** Read pool config from json
  */
-bool read_pool(const cJSON *json, struct config_pool* pool)
+bool read_pool(const cJSON *json, struct config_pool *pool)
 {
   assert(pool->host == NULL);
   assert(pool->port == NULL);
-  if(!read_bool_from_json(json, "use_tls", &pool->use_tls)){
+  if (!read_bool_from_json(json, "use_tls", &pool->use_tls)) {
     return false;
   }
 
-  const char* host = get_string_from_json(json, "host");
-  if(host == NULL)  {
+  const char *host = get_string_from_json(json, "host");
+  if (host == NULL) {
     return false;
   }
 
-  const char* port = get_string_from_json(json, "port");
+  const char *port = get_string_from_json(json, "port");
   if (port == NULL) {
     return false;
   }
@@ -185,11 +185,11 @@ bool read_pool(const cJSON *json, struct config_pool* pool)
 
 /** Read pool list from json
  */
-bool read_pool_list(const cJSON *json, struct config_pool_list* pool_list)
+bool read_pool_list(const cJSON *json, struct config_pool_list *pool_list)
 {
   assert(pool_list->size == 0);
-  const cJSON* pool_list_json = get_array_from_json(json, "pool_list");
-  if(pool_list_json == NULL) {
+  const cJSON *pool_list_json = get_array_from_json(json, "pool_list");
+  if (pool_list_json == NULL) {
     return false;
   }
   int size = cJSON_GetArraySize(pool_list_json);
@@ -213,16 +213,16 @@ bool read_pool_list(const cJSON *json, struct config_pool_list* pool_list)
  */
 bool read_miner(const cJSON *json, struct config_miner *cfg)
 {
-  if(!cJSON_IsObject(json)) {
+  if (!cJSON_IsObject(json)) {
     log_error("Config parse: \"miners\" list: Expected an object");
     return false;
   }
 
-  return read_currency(json, &cfg->currency)
-    && read_protocol(json, &cfg->protocol)
-    && read_wallet(json, &cfg->wallet)
-    && read_password(json, &cfg->password)
-    && read_pool_list(json, &cfg->pool_list);
+  return read_currency(json, &cfg->currency) &&
+         read_protocol(json, &cfg->protocol) &&
+         read_wallet(json, &cfg->wallet) &&
+         read_password(json, &cfg->password) &&
+         read_pool_list(json, &cfg->pool_list);
 }
 
 /** TODO: comment here
@@ -231,7 +231,7 @@ bool config_from_json(const cJSON *json, struct config *cfg)
 {
   assert(cfg->size == 0);
 
-  if(!cJSON_IsArray(json)) {
+  if (!cJSON_IsArray(json)) {
     log_error("Config parse: Expected array of miners");
     return false;
   }
@@ -252,8 +252,9 @@ bool config_from_json(const cJSON *json, struct config *cfg)
     if (!read_miner(miner_json, miner)) {
       return false;
     } else {
-      const char* currency_name = currency_get_info(miner->currency)->name;
-      snprintf((char*)miner->name, sizeof(miner->name), "%s~%d", currency_name, i);
+      const char *currency_name = currency_get_info(miner->currency)->name;
+      snprintf((char *)miner->name, sizeof(miner->name), "%s~%d", currency_name,
+               i);
 #ifndef NDEBUG
       log_debug("- miner: #%d:", i);
       log_debug("    protocol: %d", miner->protocol);
@@ -273,7 +274,6 @@ bool config_from_json(const cJSON *json, struct config *cfg)
 
   return true;
 }
-
 
 /** Read config from null terminated string
  */
@@ -305,11 +305,12 @@ bool config_from_string(const char *json_str, struct config **cfg_ptr)
 
 /** Read config from file
  */
-bool config_from_file(const char *filename, struct config **cfg_ptr) {
+bool config_from_file(const char *filename, struct config **cfg_ptr)
+{
   log_debug("Reading config file: %s", filename);
   assert(*cfg_ptr == NULL);
   char *json_str = read_text_file(filename);
-  if(!json_str){
+  if (!json_str) {
     return false;
   }
 
@@ -321,21 +322,21 @@ bool config_from_file(const char *filename, struct config **cfg_ptr) {
 void config_pool_free(struct config_pool *pool)
 {
   assert(pool != NULL);
-  free((void*)pool->host);
-  free((void*)pool->port);
+  free((void *)pool->host);
+  free((void *)pool->port);
 }
 
 void config_miner_free(struct config_miner *miner)
 {
   assert(miner != NULL);
-  if(miner->wallet) {
-    free((void*)miner->wallet);
+  if (miner->wallet) {
+    free((void *)miner->wallet);
   }
-  if(miner->password) {
-    free((void*)miner->password);
+  if (miner->password) {
+    free((void *)miner->password);
   }
   if (miner->pool_list.pools != NULL) {
-    for(size_t i = 0; i < miner->pool_list.size; ++i) {
+    for (size_t i = 0; i < miner->pool_list.size; ++i) {
       config_pool_free(&miner->pool_list.pools[i]);
     }
 
@@ -345,10 +346,11 @@ void config_miner_free(struct config_miner *miner)
 
 /** Free memory
  */
-void config_free(struct config *cfg) {
+void config_free(struct config *cfg)
+{
   assert(cfg != NULL);
-  if(cfg->size > 0) {
-    for(size_t i = 0; i < cfg->size; ++i) {
+  if (cfg->size > 0) {
+    for (size_t i = 0; i < cfg->size; ++i) {
       config_miner_free(&cfg->miners[i]);
     }
     free(cfg->miners);

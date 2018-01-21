@@ -8,24 +8,24 @@
 
 #include "crypto/keccak.h"
 
-#define CRYPTONIGHT_MEMORY       (1 << 21)      /* 2 MiB */
+#define CRYPTONIGHT_MEMORY (1 << 21)                       /* 2 MiB */
 #define CRYPTONIGHT_MEMORY_M128I (CRYPTONIGHT_MEMORY >> 4) // 2 MiB / 16
-#define CRYPTONIGHT_ITERATIONS   (1 << 20)  /* 524288 */
-#define CRYPTONIGHT_MASK          0x1FFFF0  /** for monero */
+#define CRYPTONIGHT_ITERATIONS (1 << 20)                   /* 524288 */
+#define CRYPTONIGHT_MASK 0x1FFFF0                          /** for monero */
 
-#define AES_GENKEY_SUB(rcon, xout0, xout2) {                            \
-    __m128i xout1 = _mm_aeskeygenassist_si128(xout2, (uint8_t)rcon);    \
-    xout1 = _mm_shuffle_epi32(xout1, 0xFF);                             \
-    xout0 = sl_xor(xout0);                                              \
-    xout0 = _mm_xor_si128(xout0, xout1);                                \
-    xout1 = _mm_aeskeygenassist_si128(xout0, 0x00);                     \
-    xout1 = _mm_shuffle_epi32(xout1, 0xAA);                             \
-    xout2 = sl_xor(xout2);                                              \
-    xout2 = _mm_xor_si128(xout2, xout1);                                \
+#define AES_GENKEY_SUB(rcon, xout0, xout2)                                     \
+  {                                                                            \
+    __m128i xout1 = _mm_aeskeygenassist_si128(xout2, (uint8_t)rcon);           \
+    xout1 = _mm_shuffle_epi32(xout1, 0xFF);                                    \
+    xout0 = sl_xor(xout0);                                                     \
+    xout0 = _mm_xor_si128(xout0, xout1);                                       \
+    xout1 = _mm_aeskeygenassist_si128(xout0, 0x00);                            \
+    xout1 = _mm_shuffle_epi32(xout1, 0xAA);                                    \
+    xout2 = sl_xor(xout2);                                                     \
+    xout2 = _mm_xor_si128(xout2, xout1);                                       \
   }
 
-
-static inline uint64_t _umul128(uint64_t a, uint64_t b, uint64_t* hi)
+static inline uint64_t _umul128(uint64_t a, uint64_t b, uint64_t *hi)
 {
   unsigned __int128 r = (unsigned __int128)a * (unsigned __int128)b;
   *hi = r >> 64;
@@ -46,8 +46,9 @@ static inline __m128i sl_xor(__m128i tmp1)
   return tmp1;
 }
 
-static inline void aes_round(__m128i key, __m128i* x0, __m128i* x1, __m128i* x2,
-                             __m128i* x3, __m128i* x4, __m128i* x5, __m128i* x6, __m128i* x7)
+static inline void aes_round(__m128i key, __m128i *x0, __m128i *x1, __m128i *x2,
+                             __m128i *x3, __m128i *x4, __m128i *x5, __m128i *x6,
+                             __m128i *x7)
 {
   *x0 = _mm_aesenc_si128(*x0, key);
   *x1 = _mm_aesenc_si128(*x1, key);
@@ -59,9 +60,10 @@ static inline void aes_round(__m128i key, __m128i* x0, __m128i* x1, __m128i* x2,
   *x7 = _mm_aesenc_si128(*x7, key);
 }
 
-static inline void aes_genkey(const __m128i* memory,
-                              __m128i* k0, __m128i* k1, __m128i* k2, __m128i* k3, __m128i* k4,
-                              __m128i* k5, __m128i* k6, __m128i* k7, __m128i* k8, __m128i* k9)
+static inline void aes_genkey(const __m128i *memory, __m128i *k0, __m128i *k1,
+                              __m128i *k2, __m128i *k3, __m128i *k4,
+                              __m128i *k5, __m128i *k6, __m128i *k7,
+                              __m128i *k8, __m128i *k9)
 {
   __m128i xout0, xout2;
 
@@ -87,9 +89,10 @@ static inline void aes_genkey(const __m128i* memory,
   *k9 = xout2;
 }
 
-void cn_explode_scratchpad(const __m128i* input, __m128i* output)
+void cn_explode_scratchpad(const __m128i *input, __m128i *output)
 {
-  // This is more than we have registers, compiler will assign 2 keys on the stack
+  // This is more than we have registers, compiler will assign 2 keys on the
+  // stack
   __m128i xin0, xin1, xin2, xin3, xin4, xin5, xin6, xin7;
   __m128i k0, k1, k2, k3, k4, k5, k6, k7, k8, k9;
 
@@ -130,14 +133,15 @@ void cn_explode_scratchpad(const __m128i* input, __m128i* output)
     _mm_store_si128(output + i + 6, xin6);
     _mm_store_si128(output + i + 7, xin7);
 
-    //if(PREFETCH)
+    // if(PREFETCH)
     //  _mm_prefetch((const char*)output + i + 4, _MM_HINT_T2);
   }
 }
 
-void cn_implode_scratchpad(const __m128i* input, __m128i* output)
+void cn_implode_scratchpad(const __m128i *input, __m128i *output)
 {
-  // This is more than we have registers, compiler will assign 2 keys on the stack
+  // This is more than we have registers, compiler will assign 2 keys on the
+  // stack
   __m128i xout0, xout1, xout2, xout3, xout4, xout5, xout6, xout7;
   __m128i k0, k1, k2, k3, k4, k5, k6, k7, k8, k9;
 
@@ -169,16 +173,26 @@ void cn_implode_scratchpad(const __m128i* input, __m128i* output)
     xout6 = _mm_xor_si128(_mm_load_si128(input + i + 6), xout6);
     xout7 = _mm_xor_si128(_mm_load_si128(input + i + 7), xout7);
 
-    aes_round(k0, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6, &xout7);
-    aes_round(k1, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6, &xout7);
-    aes_round(k2, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6, &xout7);
-    aes_round(k3, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6, &xout7);
-    aes_round(k4, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6, &xout7);
-    aes_round(k5, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6, &xout7);
-    aes_round(k6, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6, &xout7);
-    aes_round(k7, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6, &xout7);
-    aes_round(k8, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6, &xout7);
-    aes_round(k9, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6, &xout7);
+    aes_round(k0, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
+              &xout7);
+    aes_round(k1, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
+              &xout7);
+    aes_round(k2, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
+              &xout7);
+    aes_round(k3, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
+              &xout7);
+    aes_round(k4, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
+              &xout7);
+    aes_round(k5, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
+              &xout7);
+    aes_round(k6, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
+              &xout7);
+    aes_round(k7, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
+              &xout7);
+    aes_round(k8, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
+              &xout7);
+    aes_round(k9, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
+              &xout7);
   }
 
   _mm_store_si128(output + 4, xout0);
@@ -191,11 +205,9 @@ void cn_implode_scratchpad(const __m128i* input, __m128i* output)
   _mm_store_si128(output + 11, xout7);
 }
 
-
-void cryptonight_aesni(const uint8_t *input,
-                       size_t input_size,
+void cryptonight_aesni(const uint8_t *input, size_t input_size,
                        struct cryptonight_hash *output,
-                       struct cryptonight_ctx* ctx0)
+                       struct cryptonight_ctx *ctx0)
 {
   assert(input != NULL);
   assert(input_size > 0);
@@ -204,10 +216,11 @@ void cryptonight_aesni(const uint8_t *input,
 
   // init scratchpad
   keccak(input, input_size, ctx0->hash_state, 200);
-  cn_explode_scratchpad((__m128i*)ctx0->hash_state,(__m128i*)ctx0->long_state);
+  cn_explode_scratchpad((__m128i *)ctx0->hash_state,
+                        (__m128i *)ctx0->long_state);
 
-  uint8_t* l0 = ctx0->long_state;
-  uint64_t* h0 = (uint64_t*)ctx0->hash_state;
+  uint8_t *l0 = ctx0->long_state;
+  uint64_t *h0 = (uint64_t *)ctx0->hash_state;
 
   uint64_t al0 = h0[0] ^ h0[4];
   uint64_t ah0 = h0[1] ^ h0[5];
@@ -215,38 +228,40 @@ void cryptonight_aesni(const uint8_t *input,
 
   uint64_t idx0 = h0[0] ^ h0[4];
 
-  for(size_t i = 0; i < CRYPTONIGHT_ITERATIONS; ++i) {
+  for (size_t i = 0; i < CRYPTONIGHT_ITERATIONS; ++i) {
     __m128i cx;
     cx = _mm_load_si128((__m128i *)&l0[idx0 & CRYPTONIGHT_MASK]);
     cx = _mm_aesenc_si128(cx, _mm_set_epi64x(ah0, al0));
 
-    _mm_store_si128((__m128i *)&l0[idx0 & CRYPTONIGHT_MASK], _mm_xor_si128(bx0, cx));
+    _mm_store_si128((__m128i *)&l0[idx0 & CRYPTONIGHT_MASK],
+                    _mm_xor_si128(bx0, cx));
     idx0 = _mm_cvtsi128_si64(cx);
     bx0 = cx;
 
-    //if(PREFETCH)
+    // if(PREFETCH)
     //  _mm_prefetch((const char*)&l0[idx0 & MASK], _MM_HINT_T0);
 
     uint64_t hi, lo, cl, ch;
-    cl = ((uint64_t*)&l0[idx0 & CRYPTONIGHT_MASK])[0];
-    ch = ((uint64_t*)&l0[idx0 & CRYPTONIGHT_MASK])[1];
+    cl = ((uint64_t *)&l0[idx0 & CRYPTONIGHT_MASK])[0];
+    ch = ((uint64_t *)&l0[idx0 & CRYPTONIGHT_MASK])[1];
 
     lo = _umul128(idx0, cl, &hi);
 
     al0 += hi;
     ah0 += lo;
-    ((uint64_t*)&l0[idx0 & CRYPTONIGHT_MASK])[0] = al0;
-    ((uint64_t*)&l0[idx0 & CRYPTONIGHT_MASK])[1] = ah0;
+    ((uint64_t *)&l0[idx0 & CRYPTONIGHT_MASK])[0] = al0;
+    ((uint64_t *)&l0[idx0 & CRYPTONIGHT_MASK])[1] = ah0;
     ah0 ^= ch;
     al0 ^= cl;
     idx0 = al0;
 
-    //if(PREFETCH)
+    // if(PREFETCH)
     //  _mm_prefetch((const char*)&l0[idx0 & MASK], _MM_HINT_T0);
   }
-  cn_implode_scratchpad((__m128i*)ctx0->long_state,(__m128i*)ctx0->hash_state);
+  cn_implode_scratchpad((__m128i *)ctx0->long_state,
+                        (__m128i *)ctx0->hash_state);
 
-  keccakf((uint64_t*)ctx0->hash_state, 24);
+  keccakf((uint64_t *)ctx0->hash_state, 24);
   // extra hashes
   /*
 
@@ -257,5 +272,4 @@ void cryptonight_aesni(const uint8_t *input,
     do_skein_hash
   };
   */
-
 }

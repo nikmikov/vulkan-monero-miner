@@ -7,7 +7,7 @@
 
 miner_handle miner_new(const struct config_miner *cfg)
 {
-  switch(cfg->protocol) {
+  switch (cfg->protocol) {
   case STRATUM_PROTOCOL_MONERO:
     return (miner_handle)monero_miner_new(cfg);
   default:

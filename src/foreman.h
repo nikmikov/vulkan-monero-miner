@@ -4,7 +4,7 @@
 
 struct foreman;
 
-typedef struct foreman* foreman_handle;
+typedef struct foreman *foreman_handle;
 
 foreman_handle foreman_init(const struct config_miner *cfg);
 
