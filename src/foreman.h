@@ -1,5 +1,4 @@
-#ifndef FOREMAN_H
-#define FOREMAN_H
+#pragma once
 
 #include "config.h"
 
@@ -17,6 +16,3 @@ void foreman_start(foreman_handle foreman);
 
 /** stop foreman */
 void foreman_stop(foreman_handle foreman);
-
-
-#endif /** FOREMAN_H */

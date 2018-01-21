@@ -1,9 +1,7 @@
 /* currency.h -- Currency utils
  *
  */
-
-#ifndef CURRENCY_H
-#define CURRENCY_H
+#pragma once
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -25,5 +23,3 @@ const struct currency_info* currency_get_info(enum currency);
 bool currency_from_name(const char* str, enum currency* out);
 
 bool currency_from_code(const char* str, enum currency* out);
-
-#endif /** CURRENCY_H */

@@ -1,5 +1,4 @@
-#ifndef MINER_H
-#define MINER_H
+#pragma once
 
 #include "config.h"
 
@@ -35,6 +34,3 @@ struct miner {
 
 
 miner_handle miner_new(const struct config_miner *cfg);
-
-
-#endif /** MINER_H */

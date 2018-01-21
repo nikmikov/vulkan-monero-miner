@@ -4,8 +4,7 @@
  * login
  *
  */
-#ifndef STRATUM_H
-#define STRATUM_H
+#pragma once
 
 #include <uv.h>
 
@@ -67,6 +66,3 @@ struct stratum_event_handler {
 stratum_handle stratum_new(const struct config_miner *cfg);
 
 void stratum_free(stratum_handle*);
-
-
-#endif /** STRATUM_H */

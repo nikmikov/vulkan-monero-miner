@@ -12,20 +12,6 @@
 
 #include "crypto/groestl256_const.h"
 
-#define GROESTL256_HASH_BIT_LEN 256
-#define GROESTL256_COLS 8
-#define GROESTL256_ROWS 8
-#define GROESTL256_BLOCK_SIZE (GROESTL256_ROWS * GROESTL256_COLS)
-#define GROESTL256_ROUNDS 10
-
-struct groestl_state {
-  uint64_t chaining[GROESTL256_BLOCK_SIZE / 8];
-  uint8_t buffer[GROESTL256_BLOCK_SIZE];
-  uint64_t block_counter;
-  int buf_ptr;
-  int bits_in_last_byte;
-};
-
 /* xmm[i] will be multiplied by 2
  * xmm[j] will be lost
  * xmm[k] has to be all 0x1b */
@@ -507,8 +493,7 @@ void groestl256_init(struct groestl_state *state)
 }
 
 
-void groestl256_final(struct groestl_state *state,
-                      uint8_t *digest)
+void groestl256_final(struct groestl_state *state, uint8_t *digest)
 {
   int i, j = 0, hashbytelen = GROESTL256_HASH_BIT_LEN / 8;
   uint8_t *s = (uint8_t*)state->chaining;
@@ -556,9 +541,7 @@ void groestl256_final(struct groestl_state *state,
   }
 }
 
-static inline void groestl256_update(struct groestl_state *state,
-                                     const uint8_t *data,
-                                     uint64_t databitlen)
+void groestl256_update(struct groestl_state *state, const uint8_t *data, uint64_t databitlen)
 {
   int index = 0;
   int msglen = (int)(databitlen/8);

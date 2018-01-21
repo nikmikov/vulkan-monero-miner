@@ -1,9 +1,7 @@
 /* config.h -- Configuration file handling
  *
  */
-
-#ifndef CONFIG_H
-#define CONFIG_H
+#pragma once
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -57,5 +55,3 @@ bool stratum_protocol_from_string(const char *str, enum stratum_protocol *out);
 bool config_from_file(const char *filename, struct config **cfg);
 
 void config_free(struct config *cfg);
-
-#endif /** CONFIG_H */

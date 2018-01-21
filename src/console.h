@@ -1,8 +1,7 @@
 /* console.h -- console interfaces
  *
  */
-#ifndef CONSOLE_H
-#define CONSOLE_H
+#pragma once
 
 #include <stdbool.h>
 
@@ -17,5 +16,3 @@ struct console_config{
 
 void console_init(const struct console_config*);
 void console_log(enum log_level, const char *logger_name, const char *format, ...);
-
-#endif /** CONSOLE_H */

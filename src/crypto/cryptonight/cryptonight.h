@@ -1,5 +1,4 @@
-#ifndef CRYPTONIGHT_H
-#define CRYPTONIGHT_H
+#pragma once
 
 #include <stddef.h>
 #include <stdint.h>
@@ -20,5 +19,3 @@ void cryptonight_aesni(const uint8_t *input,
                        size_t input_size,
                        struct cryptonight_hash *output,
                        struct cryptonight_ctx *ctx0);
-
-#endif /** CRYPTONIGHT_H */

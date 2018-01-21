@@ -5,6 +5,14 @@
 
 #define HASH_DATA_AREA 136
 
+#ifndef KECCAK_ROUNDS
+#define KECCAK_ROUNDS 24
+#endif
+
+#ifndef ROTL64
+#define ROTL64(x, y) (((x) << (y)) | ((x) >> (64 - (y))))
+#endif
+
 const uint64_t keccakf_rndc[24] = {
   0x0000000000000001, 0x0000000000008082, 0x800000000000808a,
   0x8000000080008000, 0x000000000000808b, 0x0000000080000001,

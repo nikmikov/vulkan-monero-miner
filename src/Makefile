@@ -7,7 +7,7 @@ NODEPS:=clean distclean
 
 #default settings
 STD=-std=c11 -pedantic
-WARN=-Wall -W
+WARN=-Wall -W # -Werror
 OPT=$(OPTIMIZATION)
 DBG=$(DEBUG)
 
@@ -16,7 +16,7 @@ INSTALL_BIN=$(PREFIX)/bin
 INSTALL=install
 BUILDDIR=../build
 
-FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DBG) -march=native $(CFLAGS) -I ./
+FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DBG) -msse2 -maes -march=native $(CFLAGS) -I ./
 FINAL_LDFLAGS=$(LDFLAGS) $(DBG) -luv
 FINAL_LIBS=-lm
 DEBUG=-g -ggdb

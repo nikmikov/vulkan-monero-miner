@@ -1,5 +1,4 @@
-#ifndef CRYPTO_GROESTL256_CONST_H
-#define CRYPTO_GROESTL256_CONST_H
+#pragma once
 
 #define GROESTL256_ALL_1B _mm_set_epi32(0x1b1b1b1b, 0x1b1b1b1b, 0x1b1b1b1b, 0x1b1b1b1b)
 
@@ -37,5 +36,3 @@
 #define GROESTL256_SUBSH_MASK_5 _mm_set_epi32(0x00030b0e, 0x0907020a, 0x0d080601, 0x040c0f05)
 #define GROESTL256_SUBSH_MASK_6 _mm_set_epi32(0x01040d08, 0x0b00030c, 0x0f0a0702, 0x050e0906)
 #define GROESTL256_SUBSH_MASK_7 _mm_set_epi32(0x02050f0a, 0x0d01040e, 0x090c0003, 0x06080b07)
-
-#endif /** CRYPTO_GROESTL256_CONST_H */

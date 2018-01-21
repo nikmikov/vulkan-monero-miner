@@ -1,8 +1,7 @@
 /* connection.h -- low level connection interface to mining pool
  *
  */
-#ifndef CONNECTION_H
-#define CONNECTION_H
+#pragma once
 
 #include <stdbool.h>
 
@@ -42,6 +41,3 @@ bool connection_is_connected(connection_handle);
 void connection_write(connection_handle, uv_buf_t data);
 
 void connection_free(connection_handle*);
-
-
-#endif /** CONNECTION_H */
