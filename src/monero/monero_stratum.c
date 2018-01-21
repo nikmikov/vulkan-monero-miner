@@ -13,6 +13,7 @@
 
 #include "logging.h"
 #include "monero/monero_job.h"
+#include "monero/monero_result.h"
 #include "stratum.h"
 #include "version.h"
 
@@ -233,11 +234,12 @@ void monero_stratum_login(stratum_handle stratum,
 
 void monero_stratum_logout(stratum_handle stratum)
 {
-
+  log_info("Logging out");
 }
 
 void monero_stratum_submit(stratum_handle stratum, void *data)
 {
+  struct monero_result *result = data;
 
 }
 

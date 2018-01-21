@@ -16,7 +16,7 @@ INSTALL_BIN=$(PREFIX)/bin
 INSTALL=install
 BUILDDIR=../build
 
-FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DBG) $(CFLAGS) -I ./
+FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DBG) -march=native $(CFLAGS) -I ./
 FINAL_LDFLAGS=$(LDFLAGS) $(DBG) -luv
 FINAL_LIBS=-lm
 DEBUG=-g -ggdb
@@ -34,7 +34,8 @@ DORENOM_CC=$(CC) $(FINAL_CFLAGS)
 DORENOM_LD=$(CC) $(FINAL_LDFLAGS)
 
 DORENOM_EXECUTABLE=dorenom
-MONERO_OBJS=monero/monero_miner.o monero/monero_stratum.o
+CRYPTONIGHT_OBJS=crypto/blake256.o crypto/groestl256.o crypto/cryptonight/cryptonight.o crypto/keccak.o
+MONERO_OBJS=monero/monero_miner.o monero/monero_stratum.o $(CRYPTONIGHT_OBJS)
 DORENOM_OBJS=buffer.o cli_opts.o config.o connection.o console.o currency.o cJSON/cJSON.o dorenom.o foreman.o miner.o stratum.o $(MONERO_OBJS)
 
 all: $(DORENOM_EXECUTABLE)

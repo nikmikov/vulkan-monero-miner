@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 #include "monero/monero_job.h"
+#include "monero/monero_result.h"
 
 struct monero_miner {
   struct miner miner;
