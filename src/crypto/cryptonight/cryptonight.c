@@ -6,7 +6,7 @@
 #include <assert.h>
 #include <x86intrin.h>
 
-#include "crypto/keccak.h"
+#include "crypto/keccak-tiny.h"
 
 #define CRYPTONIGHT_MEMORY (1 << 21)                       /* 2 MiB */
 #define CRYPTONIGHT_MEMORY_M128I (CRYPTONIGHT_MEMORY >> 4) // 2 MiB / 16
@@ -215,7 +215,7 @@ void cryptonight_aesni(const uint8_t *input, size_t input_size,
   assert(ctx0 != NULL);
 
   // init scratchpad
-  keccak(input, input_size, ctx0->hash_state, 200);
+  keccak_256(ctx0->hash_state, 200, input, input_size);
   cn_explode_scratchpad((__m128i *)ctx0->hash_state,
                         (__m128i *)ctx0->long_state);
 
@@ -261,7 +261,7 @@ void cryptonight_aesni(const uint8_t *input, size_t input_size,
   cn_implode_scratchpad((__m128i *)ctx0->long_state,
                         (__m128i *)ctx0->hash_state);
 
-  keccakf((uint64_t *)ctx0->hash_state, 24);
+  //keccakf((uint64_t *)ctx0->hash_state, 24);
   // extra hashes
   /*
 

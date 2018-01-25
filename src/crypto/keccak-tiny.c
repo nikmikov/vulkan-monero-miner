@@ -6,12 +6,14 @@
  * License: CC0, attribution kindly requested. Blame taken too,
  * but not liability.
  */
-#include "keccak-tiny.h"
+#include "crypto/keccak-tiny.h"
 
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+// clang-format off
 
 /******** The Keccak-f[1600] permutation ********/
 
@@ -100,7 +102,7 @@ static inline void keccakf(void *state)
   }
 
 mkapply_ds(xorin, dst[i] ^= src[i])     // xorin
-    mkapply_sd(setout, dst[i] = src[i]) // setout
+mkapply_sd(setout, dst[i] = src[i]) // setout
 
 #define P keccakf
 #define Plen 200
@@ -114,9 +116,9 @@ mkapply_ds(xorin, dst[i] ^= src[i])     // xorin
     L -= rate;                                                                 \
   }
 
-    /** The sponge-based hash construction. **/
-    static inline int hash(uint8_t *out, size_t outlen, const uint8_t *in,
-                           size_t inlen, size_t rate, uint8_t delim)
+/** The sponge-based hash construction. **/
+static inline int hash(uint8_t *out, size_t outlen, const uint8_t *in,
+                       size_t inlen, size_t rate, uint8_t delim)
 {
   if ((out == NULL) || ((in == NULL) && inlen != 0) || (rate >= Plen)) {
     return -1;
@@ -155,8 +157,27 @@ mkapply_ds(xorin, dst[i] ^= src[i])     // xorin
     return hash(out, outlen, in, inlen, 200 - (bits / 4), 0x06);               \
   }
 
-/*** FIPS202 SHAKE VOFs ***/
-defshake(128) defshake(256)
+#define defkeccak(bits)                                                        \
+  int keccak_##bits(uint8_t *out, size_t outlen, const uint8_t *in,            \
+                    size_t inlen)                                              \
+  {                                                                            \
+    if (outlen > (bits / 8)) {                                                 \
+      return -1;                                                               \
+    }                                                                          \
+    return hash(out, outlen, in, inlen, 200 - (bits / 4), 0x01);               \
+  }
 
-    /*** FIPS202 SHA3 FOFs ***/
-    defsha3(224) defsha3(256) defsha3(384) defsha3(512)
+/*** FIPS202 SHAKE VOFs ***/
+defshake(128)
+defshake(256)
+
+/*** FIPS202 SHA3 FOFs ***/
+defsha3(224)
+defsha3(256)
+defsha3(384)
+defsha3(512)
+
+/*** pre-FIPS202 Keccak standard ***/
+defkeccak(256)
+
+// clang-format on

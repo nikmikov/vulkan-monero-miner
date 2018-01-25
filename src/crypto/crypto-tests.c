@@ -30,7 +30,7 @@ static const struct test_vector NIST_TEST_VECTORS[] = {
     {.msg = "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno",
      .repeat = 16777216}};
 
-static const char *KESSAK_256_RESULTS[] = {
+static const char *SHA3_256_RESULTS[] = {
     "3a985da74fe225b2045c172d6bd390bd855f086e3e9d525b46bfe24511431532",
     "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
     "41c0dba2a9d6240849100376a8235e2c82e1b9998a999e21db32dd97496d3376",
@@ -38,12 +38,25 @@ static const char *KESSAK_256_RESULTS[] = {
     "5c8875ae474a3634ba4fd55ec85bffd661f32aca75c6d699d0cdcb6c115891c1",
     "ecbbc42cbf296603acb2c6bc0410ef4378bafb24b710357f12df607758b33e2b"};
 
+static const char *KECCAK_256_RESULTS[] = {
+    "4e03657aea45a94fc7d47ba826c8d667c0d1e6e33a64a036ec44f58fa12d6c45",
+    "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+    "45d3b367a6904e6e8d502ee04999a7c27647f91fa845d456525fd352ae3d7371",
+    "f519747ed599024f3882238e5ab43960132572b7345fbeb9a90769dafd21ad67",
+    "fadae6b49f129bbb812be8407b7b2894f34aecf6dbd1f9b0f0c7e9853098fc96",
+    "5f313c39963dcf792b5470d4ade9f3a356a3e4021748690a958372e2b06f82a4"};
+
 static const size_t NUM_TESTS =
     sizeof(NIST_TEST_VECTORS) / sizeof(struct test_vector);
 
-void do_keccak(const void *msg, size_t msg_len, uint8_t *digest)
+void do_sha3(const void *msg, size_t msg_len, uint8_t *digest)
 {
   sha3_256(digest, DIGEST_LENGTH_BYTES, (uint8_t *)msg, msg_len);
+}
+
+void do_keccak(const void *msg, size_t msg_len, uint8_t *digest)
+{
+  keccak_256(digest, DIGEST_LENGTH_BYTES, (uint8_t *)msg, msg_len);
 }
 
 typedef void (*hash_fn)(const void *msg, size_t msg_len, uint8_t *digest);
@@ -68,9 +81,9 @@ bool test_single(const struct test_vector *test, const char *expected,
     free((void *)msg);
   }
 
-  char digest_str[DIGEST_LENGTH_BYTES * 2 + 1];
+  char digest_str[DIGEST_LENGTH_BYTES * 2 + 1] = {0};
   bin2hex(digest, DIGEST_LENGTH_BYTES, digest_str);
-  if (strncmp(expected, digest_str, DIGEST_LENGTH_BYTES) != 0) {
+  if (strncmp(expected, digest_str, DIGEST_LENGTH_BYTES * 2) != 0) {
     printf(" - FAILED: %s <> %s\n", expected, digest_str);
     return false;
   } else {
@@ -92,7 +105,8 @@ int main(int argc, char **argv)
   UNUSED_ARG(argc);
   UNUSED_ARG(argv);
 
-  test_hash("Keccak", KESSAK_256_RESULTS, do_keccak);
+  test_hash("SHA-3", SHA3_256_RESULTS, do_sha3);
+  test_hash("Keccak", KECCAK_256_RESULTS, do_keccak);
   assert(false);
   return 1;
 }
