@@ -117,9 +117,3 @@ int keccak(const uint8_t *in, int inlen, uint8_t *md, int mdlen)
 
   return 0;
 }
-/*
-void keccak1600(const uint8_t *in, int inlen, uint8_t *md)
-{
-  keccak(in, inlen, md, sizeof(state_t));
-}
-*/
