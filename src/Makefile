@@ -39,7 +39,7 @@ MONERO_OBJS=monero/monero_miner.o monero/monero_stratum.o $(CRYPTONIGHT_OBJS)
 DORENOM_OBJS=buffer.o cli_opts.o config.o connection.o console.o currency.o cJSON/cJSON.o dorenom.o foreman.o miner.o stratum.o $(MONERO_OBJS)
 
 CRYPTO_TESTS=crypto-tests
-CRYPTO_TESTS_OBJS=crypto/keccak-tiny.o  crypto/crypto-tests.o
+CRYPTO_TESTS_OBJS=crypto/keccak-tiny.o  crypto/crypto-tests.o crypto/blake256.o
 
 all: $(DORENOM_EXECUTABLE)
 .PHONY: all

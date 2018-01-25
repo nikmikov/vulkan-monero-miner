@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "crypto/blake256.h"
 #include "crypto/keccak-tiny.h"
 #include "crypto/utils.h"
 
@@ -46,6 +47,14 @@ static const char *KECCAK_256_RESULTS[] = {
     "fadae6b49f129bbb812be8407b7b2894f34aecf6dbd1f9b0f0c7e9853098fc96",
     "5f313c39963dcf792b5470d4ade9f3a356a3e4021748690a958372e2b06f82a4"};
 
+static const char *BLAKE_256_RESULTS[] = {
+    "1833a9fa7cf4086bd5fda73da32e5a1d75b4c3f89d5c436369f9d78bb2da5c28",
+    "716f6e863f744b9ac22c97ec7b76ea5f5908bc5b2f67c61510bfc4751384ea7a",
+    "adb13cb0da78463d36fcf40def3f291b3f0673e78127bdb70942cdd640b907b4",
+    "8f69d890786569cc878e9995a0ebf5e319746482ab56b8184fec5267190e6ade",
+    "22be6de4aa4214c9403f10598f0a6b0e834570251a13bc27589437f7139a5d44",
+    "b2c2ecebdb12cb0193fc18e66e00942a73fff801b4bcd89cc11a7e0e7eea8ae3"};
+
 static const size_t NUM_TESTS =
     sizeof(NIST_TEST_VECTORS) / sizeof(struct test_vector);
 
@@ -57,6 +66,11 @@ void do_sha3(const void *msg, size_t msg_len, uint8_t *digest)
 void do_keccak(const void *msg, size_t msg_len, uint8_t *digest)
 {
   keccak_256(digest, DIGEST_LENGTH_BYTES, (uint8_t *)msg, msg_len);
+}
+
+void do_blake(const void *msg, size_t msg_len, uint8_t *digest)
+{
+  blake256_hash(digest, (uint8_t *)msg, msg_len);
 }
 
 typedef void (*hash_fn)(const void *msg, size_t msg_len, uint8_t *digest);
@@ -107,6 +121,7 @@ int main(int argc, char **argv)
 
   test_hash("SHA-3", SHA3_256_RESULTS, do_sha3);
   test_hash("Keccak", KECCAK_256_RESULTS, do_keccak);
+  test_hash("Blake", BLAKE_256_RESULTS, do_blake);
   assert(false);
   return 1;
 }

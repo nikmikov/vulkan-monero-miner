@@ -261,7 +261,7 @@ void cryptonight_aesni(const uint8_t *input, size_t input_size,
   cn_implode_scratchpad((__m128i *)ctx0->long_state,
                         (__m128i *)ctx0->hash_state);
 
-  //keccakf((uint64_t *)ctx0->hash_state, 24);
+  // keccakf((uint64_t *)ctx0->hash_state, 24);
   // extra hashes
   /*
 
