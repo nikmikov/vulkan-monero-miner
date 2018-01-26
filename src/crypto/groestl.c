@@ -4,13 +4,13 @@
  *
  * This code is placed in the public domain
  */
-#include "crypto/groestl256.h"
+#include "crypto/groestl.h"
 
 #include <assert.h>
 #include <smmintrin.h>
 #include <wmmintrin.h>
 
-#include "crypto/groestl256_const.h"
+#include "crypto/groestl_const.h"
 
 /* xmm[i] will be multiplied by 2
  * xmm[j] will be lost
@@ -465,8 +465,9 @@ static inline void groestl256_transform(struct groestl_state *state,
   // asm volatile ("emms"); // TODO: check if it really needed
 }
 
-void groestl256_init(struct groestl_state *state)
+void groestl_256_init(struct groestl_state *state)
 {
+
   int i;
   for (i = 0; i < GROESTL256_BLOCK_SIZE / 8; ++i) {
     state->chaining[i] = 0;
@@ -502,7 +503,7 @@ void groestl256_init(struct groestl_state *state)
   state->bits_in_last_byte = 0;
 }
 
-void groestl256_final(struct groestl_state *state, uint8_t *digest)
+void groestl_256_final(struct groestl_state *state, uint8_t *digest)
 {
   int i, j = 0, hashbytelen = GROESTL256_HASH_BIT_LEN / 8;
   uint8_t *s = (uint8_t *)state->chaining;
@@ -551,12 +552,14 @@ void groestl256_final(struct groestl_state *state, uint8_t *digest)
   }
 }
 
-void groestl256_update(struct groestl_state *state, const uint8_t *data,
-                       uint64_t databitlen)
+void groestl_256_update(struct groestl_state *state, const void *dataptr,
+                        size_t databitlen)
 {
-  int index = 0;
-  int msglen = (int)(databitlen / 8);
-  int rem = (int)(databitlen % 8);
+  size_t index = 0;
+  size_t msglen = databitlen / 8;
+  size_t rem = databitlen % 8;
+
+  const uint8_t *data = dataptr;
 
   /* if the buffer contains data that has not yet been digested, first
      add data to buffer until full */
@@ -596,10 +599,10 @@ void groestl256_update(struct groestl_state *state, const uint8_t *data,
   }
 }
 
-void groestl256_hash(uint8_t *out, const uint8_t *in, uint64_t databitlen)
+void groestl_256(const void *input, size_t inputbitlen, uint8_t *digest)
 {
   struct groestl_state state;
-  groestl256_init(&state);
-  groestl256_update(&state, in, databitlen);
-  groestl256_final(&state, out);
+  groestl_256_init(&state);
+  groestl_256_update(&state, input, inputbitlen);
+  groestl_256_final(&state, digest);
 }

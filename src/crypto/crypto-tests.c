@@ -5,6 +5,9 @@
 #include <string.h>
 
 #include "crypto/blake256.h"
+#include "crypto/jh256.h"
+#include "crypto/groestl.h"
+#include "crypto/skein256.h"
 #include "crypto/keccak-tiny.h"
 #include "crypto/utils.h"
 
@@ -55,6 +58,33 @@ static const char *BLAKE_256_RESULTS[] = {
     "22be6de4aa4214c9403f10598f0a6b0e834570251a13bc27589437f7139a5d44",
     "b2c2ecebdb12cb0193fc18e66e00942a73fff801b4bcd89cc11a7e0e7eea8ae3"};
 
+static const char *SKEIN_256_RESULTS[] = {
+  "0977b339c3c85927071805584d5460d8f20da8389bbe97c59b1cfac291fe9527",
+  "39ccc4554a8b31853b9de7a1fe638a24cce6b35a55f2431009e18780335d2621",
+  "55b077673b26b01842cb2393b2ab4481ce94cdeb1ab56f579f8a2a6937ad5b44",
+  "9516ff1e8a8b889294cf6339cea01706a6d8bd582d0c457ced9d740ccffdcf0a",
+  "f1904077d9f219b300c49987d2f3b2f1054fea6338a5a327fda1cb02afe218f8",
+  "6e44df5b41110404a558111eb4bbd4b088aef7de2d5833171a9695c091f8b9b1"
+};
+
+static const char *JH_256_RESULTS[] = {
+  "924bc82f24a76d519d4f69493da7fa70dc88bdb6016b6d1cc1dcf7def15e9cdd",
+  "46e64619c18bb0a92a5e87185a47eef83ca747b8fcc8e1412921357e326df434",
+  "146105745c7e2dfac6a48a9b1223b111fed3a53c3efbfe8c2b2e8fa9cafd94d4",
+  "f432ab29a0a72569376d39c4cbb418081c6e114b7890cdf815ea188b0a9428d9",
+  "c229c3fcdcbe9fd6e935e80746f31dc76f4241fdc092d9893a1960d59ef1b38e",
+  "58ffbde520764dfc03b29598acd70655bb2c245a3d73fdd6eb9e1bc221af579b"
+};
+
+static const char *GROESTL_256_RESULTS[] = {
+  "f3c1bb19c048801326a7efbcf16e3d7887446249829c379e1840d1a3a1e7d4d2",
+  "1a52d11d550039be16107f9c58db9ebcc417f16f736adb2502567119f0083467",
+  "22c23b160e561f80924d44f2cc5974cd5a1d36f69324211861e63b9b6cb7974c",
+  "2538fe0a0ce6e6fee1f5a361c171543bfea6c692e09f160eeb8e10ae97dba4bb",
+  "a43cb4311fb1b53e2b207b1345e4e81c4279cf7afc9531ef10fb9edf4e705daf",
+  "5f87f9404c1142b9e701076dd047386162213a896560c1656c62bbfedfbeddb6"
+};
+
 static const size_t NUM_TESTS =
     sizeof(NIST_TEST_VECTORS) / sizeof(struct test_vector);
 
@@ -71,6 +101,21 @@ void do_keccak(const void *msg, size_t msg_len, uint8_t *digest)
 void do_blake(const void *msg, size_t msg_len, uint8_t *digest)
 {
   blake256_hash(digest, (uint8_t *)msg, msg_len);
+}
+
+void do_skein(const void *msg, size_t msg_len, uint8_t *digest)
+{
+  skein256_hash(msg, msg_len, digest);
+}
+
+void do_jh(const void *msg, size_t msg_len, uint8_t *digest)
+{
+  jh256_hash(msg, msg_len, digest);
+}
+
+void do_groestl(const void *msg, size_t msg_len, uint8_t *digest)
+{
+  groestl_256(msg, msg_len * 8, digest);
 }
 
 typedef void (*hash_fn)(const void *msg, size_t msg_len, uint8_t *digest);
@@ -119,9 +164,12 @@ int main(int argc, char **argv)
   UNUSED_ARG(argc);
   UNUSED_ARG(argv);
 
-  test_hash("SHA-3", SHA3_256_RESULTS, do_sha3);
-  test_hash("Keccak", KECCAK_256_RESULTS, do_keccak);
-  test_hash("Blake", BLAKE_256_RESULTS, do_blake);
+  //test_hash("SHA-3", SHA3_256_RESULTS, do_sha3);
+  //test_hash("Keccak", KECCAK_256_RESULTS, do_keccak);
+  //test_hash("Blake", BLAKE_256_RESULTS, do_blake);
+  //test_hash("Skein", SKEIN_256_RESULTS, do_skein);
+  //test_hash("JH", JH_256_RESULTS, do_jh);
+  test_hash("Groestl", GROESTL_256_RESULTS, do_groestl);
   assert(false);
   return 1;
 }
