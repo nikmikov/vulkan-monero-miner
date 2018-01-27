@@ -7,8 +7,8 @@
 #pragma once
 
 #include <stdalign.h>
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #define GROESTL256_HASH_BIT_LEN 256
 #define GROESTL256_COLS 8
@@ -17,8 +17,8 @@
 #define GROESTL256_ROUNDS 10
 
 struct groestl_state {
-  alignas(32) uint64_t chaining[GROESTL256_BLOCK_SIZE / 8];
-  alignas(32) uint8_t buffer[GROESTL256_BLOCK_SIZE];
+  alignas(16) uint64_t chaining[GROESTL256_BLOCK_SIZE / 8];
+  alignas(16) uint8_t buffer[GROESTL256_BLOCK_SIZE];
   uint64_t block_counter;
   int buf_ptr;
   int bits_in_last_byte;
@@ -27,7 +27,7 @@ struct groestl_state {
 /** stream processing */
 void groestl_256_init(struct groestl_state *state);
 void groestl_256_update(struct groestl_state *state, const void *data,
-                       size_t databitlen);
+                        size_t databitlen);
 void groestl_256_final(struct groestl_state *state, uint8_t *digest);
 
 /** hash fixed size input and produce 256-bit digest */

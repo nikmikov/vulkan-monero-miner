@@ -8,9 +8,13 @@
 
 #include <assert.h>
 #include <smmintrin.h>
+#include <stdalign.h>
+#include <string.h>
 #include <wmmintrin.h>
 
 #include "crypto/groestl_const.h"
+
+#define LOAD(p) _mm_load_si128((__m128i *)(p))
 
 /* xmm[i] will be multiplied by 2
  * xmm[j] will be lost
@@ -335,10 +339,9 @@
           xmm10, xmm11, xmm12, xmm13, xmm14, xmm15);                           \
   }
 
-static inline void groestl_tf512(uint64_t *h, uint64_t *m)
+static inline void groestl_tf512(uint64_t *h, const uint8_t *message)
 {
   __m128i *const chaining = (__m128i *)h;
-  __m128i *const message = (__m128i *)m;
   static __m128i xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7;
   static __m128i xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14, xmm15;
   static __m128i TEMP0;
@@ -346,10 +349,10 @@ static inline void groestl_tf512(uint64_t *h, uint64_t *m)
   static __m128i TEMP2;
 
   /* load message into registers xmm12 - xmm15 */
-  xmm12 = message[0];
-  xmm13 = message[1];
-  xmm14 = message[2];
-  xmm15 = message[3];
+  xmm12 = LOAD(message + 0);
+  xmm13 = LOAD(message + 16);
+  xmm14 = LOAD(message + 32);
+  xmm15 = LOAD(message + 48);
 
   /* transform message M from column ordering into row ordering */
   /* we first put two rows (64 bit) of the message into one 128-bit xmm register
@@ -404,7 +407,7 @@ static inline void groestl_tf512(uint64_t *h, uint64_t *m)
   chaining[3] = xmm3;
 }
 
-static inline void groestl256_output_transform(uint64_t *h)
+static inline void groestl_256_output_transform(uint64_t *h)
 {
   __m128i *const chaining = (__m128i *)h;
   static __m128i xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7;
@@ -451,18 +454,19 @@ static inline void groestl256_output_transform(uint64_t *h)
 }
 
 /* digest up to len bytes of input (full blocks only) */
-static inline void groestl256_transform(struct groestl_state *state,
-                                        const uint8_t *data, uint64_t len)
+static inline void groestl_256_transform(struct groestl_state *state,
+                                         const uint8_t *data, uint64_t len)
 {
+  alignas(16) uint8_t block[GROESTL256_BLOCK_SIZE];
   /* increment block counter */
   state->block_counter += len / GROESTL256_BLOCK_SIZE;
 
   /* digest message, one block at a time */
   for (; len >= GROESTL256_BLOCK_SIZE;
        len -= GROESTL256_BLOCK_SIZE, data += GROESTL256_BLOCK_SIZE) {
-    groestl_tf512(state->chaining, (uint64_t *)data);
+    memcpy(block, data, GROESTL256_BLOCK_SIZE);
+    groestl_tf512(state->chaining, block);
   }
-  // asm volatile ("emms"); // TODO: check if it really needed
 }
 
 void groestl_256_init(struct groestl_state *state)
@@ -476,7 +480,8 @@ void groestl_256_init(struct groestl_state *state)
     state->buffer[i] = 0;
   }
   /* set initial value */
-  state->chaining[GROESTL256_COLS - 1] = 0xff00000000000000;
+  // 64-bit BigEndian value of hash length in bits
+  state->chaining[GROESTL256_COLS - 1] = 0x0001000000000000;
   __m128i *const chaining = (__m128i *)state->chaining;
   static __m128i xmm0, /*xmm1,*/ xmm2, /*xmm3, xmm4, xmm5,*/ xmm6, xmm7;
   static __m128i /*xmm8, xmm9, xmm10, xmm11,*/ xmm12, xmm13, xmm14, xmm15;
@@ -524,7 +529,7 @@ void groestl_256_final(struct groestl_state *state, uint8_t *digest)
       state->buffer[state->buf_ptr++] = 0;
     }
     /* digest first padding block */
-    groestl256_transform(state, state->buffer, GROESTL256_BLOCK_SIZE);
+    groestl_256_transform(state, state->buffer, GROESTL256_BLOCK_SIZE);
     state->buf_ptr = 0;
   }
 
@@ -541,9 +546,9 @@ void groestl_256_final(struct groestl_state *state, uint8_t *digest)
   }
 
   /* digest final padding block */
-  groestl256_transform(state, state->buffer, GROESTL256_BLOCK_SIZE);
+  groestl_256_transform(state, state->buffer, GROESTL256_BLOCK_SIZE);
   /* perform output transformation */
-  groestl256_output_transform(state->chaining);
+  groestl_256_output_transform(state->chaining);
 
   /* store hash result in output */
   for (i = GROESTL256_BLOCK_SIZE - hashbytelen; i < GROESTL256_BLOCK_SIZE;
@@ -578,13 +583,12 @@ void groestl_256_update(struct groestl_state *state, const void *dataptr,
 
     /* digest buffer */
     state->buf_ptr = 0;
-    groestl256_transform(state, state->buffer, GROESTL256_BLOCK_SIZE);
+    groestl_256_transform(state, state->buffer, GROESTL256_BLOCK_SIZE);
   }
 
   /* digest bulk of message */
-  groestl256_transform(state, data + index, msglen - index);
+  groestl_256_transform(state, data + index, msglen - index);
   index += ((msglen - index) / GROESTL256_BLOCK_SIZE) * GROESTL256_BLOCK_SIZE;
-
   /* store remaining data in buffer */
   while (index < msglen) {
     state->buffer[state->buf_ptr++] = data[index++];
