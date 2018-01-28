@@ -12,7 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "crypto/blake256.h"
+#include "crypto/blake.h"
 
 #define U8TO32(p)                                                              \
   (((uint32_t)((p)[0]) << 24) | ((uint32_t)((p)[1]) << 16) |                   \
@@ -49,13 +49,7 @@ static const uint8_t padding[] = {
     0,    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0,    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-struct blake_state {
-  uint32_t h[8], s[4], t[2];
-  int buflen, nullt;
-  uint8_t buf[64];
-};
-
-void blake256_compress(struct blake_state *state, const uint8_t *block)
+void blake_256_compress(struct blake_state *state, const uint8_t *block)
 {
   uint32_t v[16], m[16], i;
 
@@ -113,7 +107,7 @@ void blake256_compress(struct blake_state *state, const uint8_t *block)
   }
 }
 
-static inline void blake256_init(struct blake_state *state)
+void blake_256_init(struct blake_state *state)
 {
   state->h[0] = 0x6A09E667;
   state->h[1] = 0xBB67AE85;
@@ -128,9 +122,10 @@ static inline void blake256_init(struct blake_state *state)
 }
 
 // datalen = number of bits
-void blake256_update(struct blake_state *state, const uint8_t *data,
-                     uint64_t datalen)
+void blake_256_update(struct blake_state *state, const void *dataptr,
+                      size_t datalen)
 {
+  const uint8_t *data = dataptr;
   int left = state->buflen >> 3;
   int fill = 64 - left;
 
@@ -139,7 +134,7 @@ void blake256_update(struct blake_state *state, const uint8_t *data,
     state->t[0] += 512;
     if (state->t[0] == 0)
       state->t[1]++;
-    blake256_compress(state, state->buf);
+    blake_256_compress(state, state->buf);
     data += fill;
     datalen -= (fill << 3);
     left = 0;
@@ -149,7 +144,7 @@ void blake256_update(struct blake_state *state, const uint8_t *data,
     state->t[0] += 512;
     if (state->t[0] == 0)
       state->t[1]++;
-    blake256_compress(state, data);
+    blake_256_compress(state, data);
     data += 64;
     datalen -= 512;
   }
@@ -175,26 +170,26 @@ void blake256_final_h(struct blake_state *state, uint8_t *digest, uint8_t pa,
 
   if (state->buflen == 440) { /* one padding byte */
     state->t[0] -= 8;
-    blake256_update(state, &pa, 8);
+    blake_256_update(state, &pa, 8);
   } else {
     if (state->buflen < 440) { /* enough space to fill the block  */
       if (state->buflen == 0) {
         state->nullt = 1;
       }
       state->t[0] -= 440 - state->buflen;
-      blake256_update(state, padding, 440 - state->buflen);
+      blake_256_update(state, padding, 440 - state->buflen);
     } else { /* need 2 compressions */
       state->t[0] -= 512 - state->buflen;
-      blake256_update(state, padding, 512 - state->buflen);
+      blake_256_update(state, padding, 512 - state->buflen);
       state->t[0] -= 440;
-      blake256_update(state, padding + 1, 440);
+      blake_256_update(state, padding + 1, 440);
       state->nullt = 1;
     }
-    blake256_update(state, &pb, 8);
+    blake_256_update(state, &pb, 8);
     state->t[0] -= 8;
   }
   state->t[0] -= 64;
-  blake256_update(state, msglen, 64);
+  blake_256_update(state, msglen, 64);
 
   U32TO8(digest + 0, state->h[0]);
   U32TO8(digest + 4, state->h[1]);
@@ -206,16 +201,16 @@ void blake256_final_h(struct blake_state *state, uint8_t *digest, uint8_t pa,
   U32TO8(digest + 28, state->h[7]);
 }
 
-void blake256_final(struct blake_state *state, uint8_t *digest)
+void blake_256_final(struct blake_state *state, uint8_t *digest)
 {
   blake256_final_h(state, digest, 0x81, 0x01);
 }
 
 // inlen = number of bytes
-void blake256_hash(uint8_t *out, const uint8_t *in, uint64_t inlen)
+void blake_256(const void *input, size_t inputbitlen, uint8_t *digest)
 {
   struct blake_state state;
-  blake256_init(&state);
-  blake256_update(&state, in, inlen * 8);
-  blake256_final(&state, out);
+  blake_256_init(&state);
+  blake_256_update(&state, input, inputbitlen);
+  blake_256_final(&state, digest);
 }

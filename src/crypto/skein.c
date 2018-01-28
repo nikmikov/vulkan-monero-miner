@@ -12,8 +12,8 @@
 #define SKEIN_T1_POS_FINAL SKEIN_T1_BIT(127) /* bit 127 : final block flag */
 #define SKEIN_T1_POS_BIT_PAD                                                   \
   SKEIN_T1_BIT(119) /* bit 119: partial final input byte */
-#define SKEIN_T1_POS_BLK_TYPE                                                  \
-  SKEIN_T1_BIT(120) /* bits 120..125: type field */
+#define SKEIN_T1_POS_BLK_TYPE SKEIN_T1_BIT(120) /* bits 120..125: type field   \
+                                                 */
 
 /* tweak word T[1]: flag bit definition(s) */
 #define SKEIN_T1_FLAG_FIRST (((uint64_t)1) << SKEIN_T1_POS_FIRST)

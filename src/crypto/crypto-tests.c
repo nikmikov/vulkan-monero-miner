@@ -1,10 +1,9 @@
 #include <assert.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "crypto/blake256.h"
+#include "crypto/blake.h"
 #include "crypto/groestl.h"
 #include "crypto/jh.h"
 #include "crypto/keccak-tiny.h"
@@ -104,7 +103,7 @@ void do_keccak(const void *msg, size_t msg_len, uint8_t *digest)
 
 void do_blake(const void *msg, size_t msg_len, uint8_t *digest)
 {
-  blake256_hash(digest, (uint8_t *)msg, msg_len);
+  blake_256(msg, msg_len * 8, digest);
 }
 
 void do_skein(const void *msg, size_t msg_len, uint8_t *digest)
@@ -124,8 +123,7 @@ void do_groestl(const void *msg, size_t msg_len, uint8_t *digest)
 
 typedef void (*hash_fn)(const void *msg, size_t msg_len, uint8_t *digest);
 
-bool test_single(const struct test_vector *test, const char *expected,
-                 hash_fn h)
+int test_single(const struct test_vector *test, const char *expected, hash_fn h)
 {
   size_t msg_len = strlen(test->msg);
   const char *msg = test->msg;
@@ -148,19 +146,21 @@ bool test_single(const struct test_vector *test, const char *expected,
   bin2hex(digest, DIGEST_LENGTH_BYTES, digest_str);
   if (strncmp(expected, digest_str, DIGEST_LENGTH_BYTES * 2) != 0) {
     printf(" - FAIL: %s <> %s\n", expected, digest_str);
-    return false;
+    return 1;
   } else {
     printf(" + PASS: %s\n", expected);
-    return true;
+    return 0;
   }
 }
 
-void test_hash(const char *test_name, const char *expected[], hash_fn h)
+int test_hash(const char *test_name, const char *expected[], hash_fn h)
 {
+  int failures = 0;
   printf("Testing %s\n", test_name);
   for (size_t i = 0; i < NUM_TESTS; ++i) {
-    test_single(NIST_TEST_VECTORS + i, expected[i], h);
+    failures += test_single(NIST_TEST_VECTORS + i, expected[i], h);
   }
+  return failures;
 }
 
 int main(int argc, char **argv)
@@ -168,12 +168,17 @@ int main(int argc, char **argv)
   UNUSED_ARG(argc);
   UNUSED_ARG(argv);
 
-  test_hash("SHA-3", SHA3_256_RESULTS, do_sha3);
-  test_hash("Keccak", KECCAK_256_RESULTS, do_keccak);
-  test_hash("Blake", BLAKE_256_RESULTS, do_blake);
-  test_hash("Skein-512-256", SKEIN_256_RESULTS, do_skein);
-  test_hash("JH", JH_256_RESULTS, do_jh);
-  test_hash("Groestl", GROESTL_256_RESULTS, do_groestl);
-  assert(false);
-  return 1;
+  int failures = 0;
+  failures += test_hash("SHA-3", SHA3_256_RESULTS, do_sha3);
+  failures += test_hash("Keccak", KECCAK_256_RESULTS, do_keccak);
+  failures += test_hash("Blake", BLAKE_256_RESULTS, do_blake);
+  failures += test_hash("Skein-512-256", SKEIN_256_RESULTS, do_skein);
+  failures += test_hash("JH", JH_256_RESULTS, do_jh);
+  failures += test_hash("Groestl", GROESTL_256_RESULTS, do_groestl);
+  if (failures > 0) {
+    printf("FAILURE: Tests failed: %d\n", failures);
+  } else {
+    printf("SUCCESS: All test passed\n");
+  }
+  return failures;
 }
