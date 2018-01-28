@@ -7,13 +7,13 @@
  *
  * Only 256 bit digest supported
  */
-#include "crypto/jh256.h"
+#include "crypto/jh.h"
 
 #include <emmintrin.h>
 #include <stdalign.h>
 #include <string.h>
 
-#include "crypto/jh256_const.h"
+#include "crypto/jh_const.h"
 
 #define CONSTANT(b) _mm_set1_epi8((b))
 #define XOR(x, y) _mm_xor_si128((x), (y))
@@ -187,7 +187,7 @@
   lineartransform_R##nn(y0, y2, y4, y6, y1, y3, y5, y7);
 
 /* The compression function F8 */
-void jh256_f8(struct jh256_state *state)
+void jh_f8(struct jh_state *state)
 {
   __m128i y0, y1, y2, y3, y4, y5, y6, y7;
   __m128i a0, a1;
@@ -272,7 +272,7 @@ void jh256_f8(struct jh256_state *state)
   state->x7 = y7;
 }
 
-void jh256_init(struct jh256_state *state)
+void jh_256_init(struct jh_state *state)
 {
   state->databitlen = 0;
   state->datasize_in_buffer = 0;
@@ -288,8 +288,8 @@ void jh256_init(struct jh256_state *state)
 }
 
 /*hash each 512-bit message block, except the last partial block*/
-void jh256_update(struct jh256_state *state, const void *data_ptr,
-                  uint64_t databitlen)
+void jh_update(struct jh_state *state, const void *data_ptr,
+                  size_t databitlen)
 {
   const uint8_t *data = data_ptr;
   uint64_t index = 0;
@@ -307,9 +307,10 @@ void jh256_update(struct jh256_state *state, const void *data_ptr,
     if ((databitlen & 7) == 0) {
       memcpy(state->buffer + (state->datasize_in_buffer >> 3), data,
              64 - (state->datasize_in_buffer >> 3));
-    } else
+    } else {
       memcpy(state->buffer + (state->datasize_in_buffer >> 3), data,
              64 - (state->datasize_in_buffer >> 3) + 1);
+    }
     state->datasize_in_buffer += databitlen;
     databitlen = 0;
   }
@@ -322,14 +323,14 @@ void jh256_update(struct jh256_state *state, const void *data_ptr,
            64 - (state->datasize_in_buffer >> 3));
     index = 64 - (state->datasize_in_buffer >> 3);
     databitlen = databitlen - (512 - state->datasize_in_buffer);
-    jh256_f8(state);
+    jh_f8(state);
     state->datasize_in_buffer = 0;
   }
 
   // hash the remaining full message blocks
   for (; databitlen >= 512; index = index + 64, databitlen = databitlen - 512) {
     memcpy(state->buffer, data + index, 64);
-    jh256_f8(state);
+    jh_f8(state);
   }
 
   // store the partial block into buffer, assume that -- if part of the last
@@ -344,7 +345,7 @@ void jh256_update(struct jh256_state *state, const void *data_ptr,
   }
 }
 
-void jh256_final(struct jh256_state *state, uint8_t *digest)
+void jh_256_final(struct jh_state *state, uint8_t *digest)
 {
   if ((state->databitlen & 0x1ff) == 0) {
     // pad the message when databitlen is multiple of 512 bits, then process the
@@ -359,7 +360,7 @@ void jh256_final(struct jh256_state *state, uint8_t *digest)
     state->buffer[58] = (state->databitlen >> 40) & 0xff;
     state->buffer[57] = (state->databitlen >> 48) & 0xff;
     state->buffer[56] = (state->databitlen >> 56) & 0xff;
-    jh256_f8(state);
+    jh_f8(state);
   } else {
     // set the rest of the bytes in the buffer to 0
     if ((state->datasize_in_buffer & 7) == 0) {
@@ -376,7 +377,7 @@ void jh256_final(struct jh256_state *state, uint8_t *digest)
     // bits, then hash the padded blocks
     state->buffer[((state->databitlen & 0x1ff) >> 3)] |=
         1 << (7 - (state->databitlen & 7));
-    jh256_f8(state);
+    jh_f8(state);
     memset(state->buffer, 0, 64);
     state->buffer[63] = state->databitlen & 0xff;
     state->buffer[62] = (state->databitlen >> 8) & 0xff;
@@ -386,7 +387,7 @@ void jh256_final(struct jh256_state *state, uint8_t *digest)
     state->buffer[58] = (state->databitlen >> 40) & 0xff;
     state->buffer[57] = (state->databitlen >> 48) & 0xff;
     state->buffer[56] = (state->databitlen >> 56) & 0xff;
-    jh256_f8(state);
+    jh_f8(state);
   }
 
   // truncating the final hash value to generate the message digest
@@ -397,10 +398,10 @@ void jh256_final(struct jh256_state *state, uint8_t *digest)
   memcpy(digest, t, 32);
 }
 
-void jh256_hash(const void *in, uint64_t inlen_bytes, uint8_t *digest)
+void jh_256(const void *input, size_t inputbitlen, uint8_t *digest)
 {
-  struct jh256_state state;
-  jh256_init(&state);
-  jh256_update(&state, in, inlen_bytes * 8);
-  jh256_final(&state, digest);
+  struct jh_state state;
+  jh_256_init(&state);
+  jh_update(&state, input, inputbitlen);
+  jh_256_final(&state, digest);
 }

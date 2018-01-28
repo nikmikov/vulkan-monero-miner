@@ -10,10 +10,11 @@
 #pragma once
 
 #include <stdint.h>
+#include <stddef.h>
 
 #include <xmmintrin.h>
 
-struct jh256_state {
+struct jh_state {
   /*the message size in bits*/
   uint64_t databitlen;
 
@@ -28,9 +29,11 @@ struct jh256_state {
   uint8_t buffer[64];
 };
 
-void jh256_init(struct jh256_state *state);
-void jh256_update(struct jh256_state *state, const void *data,
-                  uint64_t databitlen);
-void jh256_final(struct jh256_state *state, uint8_t *digest);
+/** stream processing */
+void jh_256_init(struct jh_state *state);
+void jh_update(struct jh_state *state, const void *data,
+               size_t databitlen);
+void jh_256_final(struct jh_state *state, uint8_t *digest);
 
-void jh256_hash(const void *in, uint64_t inlen_bytes, uint8_t *digest);
+/** hash fixed size input and produce 256-bit digest */
+void jh_256(const void *input, size_t inputbitlen, uint8_t *digest);
