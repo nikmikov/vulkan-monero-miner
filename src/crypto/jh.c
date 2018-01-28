@@ -288,8 +288,7 @@ void jh_256_init(struct jh_state *state)
 }
 
 /*hash each 512-bit message block, except the last partial block*/
-void jh_update(struct jh_state *state, const void *data_ptr,
-                  size_t databitlen)
+void jh_update(struct jh_state *state, const void *data_ptr, size_t databitlen)
 {
   const uint8_t *data = data_ptr;
   uint64_t index = 0;

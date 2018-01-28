@@ -6,7 +6,7 @@
 
 #include "crypto/blake256.h"
 #include "crypto/groestl.h"
-#include "crypto/jh256.h"
+#include "crypto/jh.h"
 #include "crypto/keccak-tiny.h"
 #include "crypto/skein.h"
 #include "crypto/utils.h"
@@ -114,7 +114,7 @@ void do_skein(const void *msg, size_t msg_len, uint8_t *digest)
 
 void do_jh(const void *msg, size_t msg_len, uint8_t *digest)
 {
-  jh256_hash(msg, msg_len, digest);
+  jh_256(msg, msg_len * 8, digest);
 }
 
 void do_groestl(const void *msg, size_t msg_len, uint8_t *digest)

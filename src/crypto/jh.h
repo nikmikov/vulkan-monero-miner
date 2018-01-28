@@ -9,8 +9,8 @@
  */
 #pragma once
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include <xmmintrin.h>
 
@@ -31,8 +31,7 @@ struct jh_state {
 
 /** stream processing */
 void jh_256_init(struct jh_state *state);
-void jh_update(struct jh_state *state, const void *data,
-               size_t databitlen);
+void jh_update(struct jh_state *state, const void *data, size_t databitlen);
 void jh_256_final(struct jh_state *state, uint8_t *digest);
 
 /** hash fixed size input and produce 256-bit digest */

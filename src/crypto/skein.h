@@ -10,8 +10,6 @@
 
 #define SKEIN_512_BLOCK_SIZE 64
 #define SKEIN_512_STATE_WORDS (SKEIN_512_BLOCK_SIZE / 8)
-#define SKEIN_512_ROUNDS_TOTAL 72
-#define SKEIN_KS_PARITY 0x1BD11BDAA9FC1A22
 
 struct skein_512_state {
   /* chaining variables */
