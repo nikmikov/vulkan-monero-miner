@@ -25,3 +25,5 @@ decsha3(512)
 deckeccak(256)
 
 // clang-format on
+
+void keccak_f(uint64_t st[24], int rounds);

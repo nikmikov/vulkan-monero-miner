@@ -57,14 +57,14 @@ static const uint64_t RC[24] = {1ULL,
   REPEAT5(e; v += s;)
 
 /*** Keccak-f[1600] ***/
-static inline void keccakf(void *state)
+static inline void keccakf(void *state, int rounds)
 {
   uint64_t *a = (uint64_t *)state;
   uint64_t b[5] = {0};
   uint64_t t = 0;
   uint8_t x, y;
 
-  for (int i = 0; i < 24; i++) {
+  for (int i = 0; i < rounds; i++) {
     // Theta
     FOR5(x, 1, b[x] = 0; FOR5(y, 5, b[x] ^= a[x + y];))
     FOR5(x, 1, FOR5(y, 5, a[y + x] ^= b[(x + 4) % 5] ^ rol(b[(x + 1) % 5], 1);))
@@ -111,7 +111,7 @@ mkapply_sd(setout, dst[i] = src[i]) // setout
 #define foldP(I, L, F)                                                         \
   while (L >= rate) {                                                          \
     F(a, I, rate);                                                             \
-    P(a);                                                                      \
+    P(a, 24);                                                                  \
     I += rate;                                                                 \
     L -= rate;                                                                 \
   }
@@ -132,9 +132,10 @@ static inline int hash(uint8_t *out, size_t outlen, const uint8_t *in,
   // Xor in the last block.
   xorin(a, in, inlen);
   // Apply P
-  P(a);
+  P(a, 24);
+  // TODO: it seems work without final `foldP`, commenting it out for now
   // Squeeze output.
-  foldP(out, outlen, setout);
+  // foldP(out, outlen, setout);
   setout(a, out, outlen);
   memset_s(a, 200, 0, 200);
   return 0;
@@ -160,12 +161,14 @@ static inline int hash(uint8_t *out, size_t outlen, const uint8_t *in,
 #define defkeccak(bits)                                                        \
   int keccak_##bits(uint8_t *out, size_t outlen, const uint8_t *in,            \
                     size_t inlen)                                              \
-  {                                                                            \
-    if (outlen > (bits / 8)) {                                                 \
-      return -1;                                                               \
-    }                                                                          \
+  {                                                                     \
     return hash(out, outlen, in, inlen, 200 - (bits / 4), 0x01);               \
   }
+
+void keccak_f(uint64_t st[25], int rounds)
+{
+  keccakf(st, rounds);
+}
 
 /*** FIPS202 SHAKE VOFs ***/
 defshake(128)

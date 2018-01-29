@@ -4,14 +4,25 @@
 #include "crypto/cryptonight/cryptonight.h"
 
 #include <assert.h>
+#include <stdalign.h>
 #include <x86intrin.h>
 
+#include "crypto/blake.h"
+#include "crypto/groestl.h"
+#include "crypto/jh.h"
 #include "crypto/keccak-tiny.h"
+#include "crypto/skein.h"
 
-#define CRYPTONIGHT_MEMORY (1 << 21)                       /* 2 MiB */
-#define CRYPTONIGHT_MEMORY_M128I (CRYPTONIGHT_MEMORY >> 4) // 2 MiB / 16
-#define CRYPTONIGHT_ITERATIONS (1 << 20)                   /* 524288 */
+#define CRYPTONIGHT_MEMORY 2097152                         /* 2 MiB */
+#define CRYPTONIGHT_MEMORY_M128I (CRYPTONIGHT_MEMORY >> 4) /* 2 MiB / 16 */
+#define CRYPTONIGHT_ITERATIONS 0x80000                     /** 524288 */
 #define CRYPTONIGHT_MASK 0x1FFFF0                          /** for monero */
+
+struct cryptonight_ctx {
+  /*alignas(CRYPTONIGHT_MEMORY)*/ uint8_t long_state[CRYPTONIGHT_MEMORY];
+  uint8_t hash_state[224]; // Need only 200, explicit align
+  uint8_t ctx_info[24];    // Use some of the extra memory for flags
+};
 
 #define AES_GENKEY_SUB(rcon, xout0, xout2)                                     \
   {                                                                            \
@@ -216,6 +227,7 @@ void cryptonight_aesni(const uint8_t *input, size_t input_size,
 
   // init scratchpad
   keccak_256(ctx0->hash_state, 200, input, input_size);
+
   cn_explode_scratchpad((__m128i *)ctx0->hash_state,
                         (__m128i *)ctx0->long_state);
 
@@ -261,15 +273,22 @@ void cryptonight_aesni(const uint8_t *input, size_t input_size,
   cn_implode_scratchpad((__m128i *)ctx0->long_state,
                         (__m128i *)ctx0->hash_state);
 
-  // keccakf((uint64_t *)ctx0->hash_state, 24);
-  // extra hashes
-  /*
+  keccak_f((uint64_t *)ctx0->hash_state, 24);
 
-  static void (*const extra_hashes[4])(const void *, size_t, char *) = {
-    do_blake_hash,
-    do_groestl_hash,
-    do_jh_hash,
-    do_skein_hash
-  };
-  */
+  static void (*const extra_hashes[4])(const void *, size_t, uint8_t *) = {
+      blake_256, groestl_256, jh_256, skein_512_256};
+
+  extra_hashes[ctx0->hash_state[0] & 3](ctx0->hash_state, 200 * 8,
+                                        (uint8_t *)output);
+}
+
+struct cryptonight_ctx *cryptonight_ctx_new()
+{
+  return calloc(1, sizeof(struct cryptonight_ctx));
+}
+
+void cryptonight_ctx_free(struct cryptonight_ctx **ptr)
+{
+  free(*ptr);
+  *ptr = NULL;
 }

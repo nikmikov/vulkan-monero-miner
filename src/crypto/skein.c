@@ -1,6 +1,6 @@
 #include "crypto/skein.h"
 
-#include "crypto/utils.h"
+#include <assert.h>
 #include <string.h>
 
 #define SKEIN_512_ROUNDS_TOTAL 72
@@ -12,8 +12,9 @@
 #define SKEIN_T1_POS_FINAL SKEIN_T1_BIT(127) /* bit 127 : final block flag */
 #define SKEIN_T1_POS_BIT_PAD                                                   \
   SKEIN_T1_BIT(119) /* bit 119: partial final input byte */
-#define SKEIN_T1_POS_BLK_TYPE SKEIN_T1_BIT(120) /* bits 120..125: type field   \
-                                                 */
+#define SKEIN_T1_POS_BLK_TYPE                                                  \
+  SKEIN_T1_BIT(120) /* bits 120..125: type field                               \
+                     */
 
 /* tweak word T[1]: flag bit definition(s) */
 #define SKEIN_T1_FLAG_FIRST (((uint64_t)1) << SKEIN_T1_POS_FIRST)
@@ -71,9 +72,10 @@ enum {
 };
 
 /*  process single block  */
-void skein_512_process_block(struct skein_512_state *state, uint64_t *data,
-                             uint64_t byteCntAdd)
+void skein_512_process_block(struct skein_512_state *state, const uint8_t *data,
+                             size_t blkCnt, size_t byteCntAdd)
 {
+  assert(blkCnt > 0);
   static const size_t WCNT = SKEIN_512_STATE_WORDS;
   static const size_t RCNT = SKEIN_512_ROUNDS_TOTAL / 8;
 
@@ -84,35 +86,41 @@ void skein_512_process_block(struct skein_512_state *state, uint64_t *data,
 
   /* local copy of context vars, for speed */
   uint64_t X0, X1, X2, X3, X4, X5, X6, X7;
-
-  ts[0] = state->T[0] + byteCntAdd;
+  uint64_t w[WCNT]; /* local copy of input block */
+  ts[0] = state->T[0];
   ts[1] = state->T[1];
+  do {
+    ts[0] += byteCntAdd;
 
-  /* this implementation only supports 2**64 input bytes (no carry out here) */
+    /* this implementation only supports 2**64 input bytes (no carry out here)
+     */
 
-  /* precompute the key schedule for this block */
-  ks[0] = state->chaining[0];
-  ks[1] = state->chaining[1];
-  ks[2] = state->chaining[2];
-  ks[3] = state->chaining[3];
-  ks[4] = state->chaining[4];
-  ks[5] = state->chaining[5];
-  ks[6] = state->chaining[6];
-  ks[7] = state->chaining[7];
-  ks[8] = ks[0] ^ ks[1] ^ ks[2] ^ ks[3] ^ ks[4] ^ ks[5] ^ ks[6] ^ ks[7] ^
-          SKEIN_KS_PARITY;
+    /* precompute the key schedule for this block */
+    ks[0] = state->chaining[0];
+    ks[1] = state->chaining[1];
+    ks[2] = state->chaining[2];
+    ks[3] = state->chaining[3];
+    ks[4] = state->chaining[4];
+    ks[5] = state->chaining[5];
+    ks[6] = state->chaining[6];
+    ks[7] = state->chaining[7];
+    ks[8] = ks[0] ^ ks[1] ^ ks[2] ^ ks[3] ^ ks[4] ^ ks[5] ^ ks[6] ^ ks[7] ^
+            SKEIN_KS_PARITY;
 
-  ts[2] = ts[0] ^ ts[1];
+    ts[2] = ts[0] ^ ts[1];
 
-  /* do the first full key injection */
-  X0 = data[0] + ks[0];
-  X1 = data[1] + ks[1];
-  X2 = data[2] + ks[2];
-  X3 = data[3] + ks[3];
-  X4 = data[4] + ks[4];
-  X5 = data[5] + ks[5] + ts[0];
-  X6 = data[6] + ks[6] + ts[1];
-  X7 = data[7] + ks[7];
+    /* Copy block */
+    memcpy(w, data, SKEIN_512_BLOCK_SIZE);
+    data += SKEIN_512_BLOCK_SIZE;
+    /* do the first full key injection */
+    X0 = w[0] + ks[0];
+    X1 = w[1] + ks[1];
+    X2 = w[2] + ks[2];
+    X3 = w[3] + ks[3];
+    X4 = w[4] + ks[4];
+    X5 = w[5] + ks[5] + ts[0];
+    X6 = w[6] + ks[6] + ts[1];
+    X7 = w[7] + ks[7];
 
 #define R512(p0, p1, p2, p3, p4, p5, p6, p7, ROT, rNum)                        \
   X##p0 += X##p1;                                                              \
@@ -150,28 +158,29 @@ void skein_512_process_block(struct skein_512_state *state, uint64_t *data,
   R512(6, 1, 0, 7, 2, 5, 4, 3, R_512_7, 8 * (R) + 8);                          \
   I512(2 * (R) + 1); /* and key injection */
 
-  // 72 rounds
-  R512_8_rounds(0);
-  R512_8_rounds(1);
-  R512_8_rounds(2);
-  R512_8_rounds(3);
-  R512_8_rounds(4);
-  R512_8_rounds(5);
-  R512_8_rounds(6);
-  R512_8_rounds(7);
-  R512_8_rounds(8);
+    // 72 rounds
+    R512_8_rounds(0);
+    R512_8_rounds(1);
+    R512_8_rounds(2);
+    R512_8_rounds(3);
+    R512_8_rounds(4);
+    R512_8_rounds(5);
+    R512_8_rounds(6);
+    R512_8_rounds(7);
+    R512_8_rounds(8);
 
-  /* do the final "feedforward" xor, update context chaining vars */
-  state->chaining[0] = X0 ^ data[0];
-  state->chaining[1] = X1 ^ data[1];
-  state->chaining[2] = X2 ^ data[2];
-  state->chaining[3] = X3 ^ data[3];
-  state->chaining[4] = X4 ^ data[4];
-  state->chaining[5] = X5 ^ data[5];
-  state->chaining[6] = X6 ^ data[6];
-  state->chaining[7] = X7 ^ data[7];
+    /* do the final "feedforward" xor, update context chaining vars */
+    state->chaining[0] = X0 ^ w[0];
+    state->chaining[1] = X1 ^ w[1];
+    state->chaining[2] = X2 ^ w[2];
+    state->chaining[3] = X3 ^ w[3];
+    state->chaining[4] = X4 ^ w[4];
+    state->chaining[5] = X5 ^ w[5];
+    state->chaining[6] = X6 ^ w[6];
+    state->chaining[7] = X7 ^ w[7];
 
-  ts[1] &= ~SKEIN_T1_FLAG_FIRST;
+    ts[1] &= ~SKEIN_T1_FLAG_FIRST;
+  } while (--blkCnt);
 
   state->T[0] = ts[0];
   state->T[1] = ts[1];
@@ -184,12 +193,12 @@ static inline size_t skein_512_transform(struct skein_512_state *state,
 {
   /* increment block counter */
   /* digest message, one block at a time */
-  const uint8_t *p = data;
-  for (; len > SKEIN_512_BLOCK_SIZE;
-       len -= SKEIN_512_BLOCK_SIZE, p += SKEIN_512_BLOCK_SIZE) {
-    skein_512_process_block(state, (uint64_t *)data, SKEIN_512_BLOCK_SIZE);
+  int blkCnt = (len - 1) / SKEIN_512_BLOCK_SIZE;
+  if (blkCnt > 0) {
+    skein_512_process_block(state, data, (size_t)blkCnt, SKEIN_512_BLOCK_SIZE);
   }
-  return (size_t)(p - data);
+
+  return blkCnt * SKEIN_512_BLOCK_SIZE;
 }
 
 void skein_512_256_init(struct skein_512_state *state)
@@ -232,12 +241,11 @@ void skein_512_update(struct skein_512_state *state, const void *dataptr,
     /* digest buffer if there is more data to process */
     if (index < msglen) {
       state->buf_ptr = 0;
-      skein_512_transform(state, state->buffer, SKEIN_512_BLOCK_SIZE);
+      skein_512_process_block(state, state->buffer, 1, SKEIN_512_BLOCK_SIZE);
     }
   }
 
   /* digest bulk of message */
-
   index += skein_512_transform(state, data + index, msglen - index);
   /* store remaining data in buffer */
   while (index < msglen) {
@@ -275,7 +283,7 @@ void skein_512_final(struct skein_512_state *state, size_t digestbitlen,
       state->buffer[state->buf_ptr++] = 0;
     }
     // process final block
-    skein_512_process_block(state, (uint64_t *)state->buffer, bytes_in_buf);
+    skein_512_process_block(state, state->buffer, 1, bytes_in_buf);
   }
   /* now output the result */
   /* run Threefish in "counter mode" to generate output */
@@ -287,7 +295,7 @@ void skein_512_final(struct skein_512_state *state, size_t digestbitlen,
   state->T[1] = SKEIN_T1_FLAG_FIRST | SKEIN_T1_BLK_TYPE_OUT_FINAL;
 
   /* run "counter mode" */
-  skein_512_process_block(state, (uint64_t *)state->buffer, sizeof(uint64_t));
+  skein_512_process_block(state, state->buffer, 1, sizeof(uint64_t));
 
   /* "output" the ctr mode bytes */
   memcpy(digest, state->chaining, digestbitlen / 8);
