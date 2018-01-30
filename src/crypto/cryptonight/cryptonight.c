@@ -221,7 +221,6 @@ void cryptonight_aesni(const uint8_t *input, size_t input_size,
                        struct cryptonight_ctx *ctx0)
 {
   assert(input != NULL);
-  assert(input_size > 0);
   assert(output != NULL);
   assert(ctx0 != NULL);
 
@@ -277,9 +276,8 @@ void cryptonight_aesni(const uint8_t *input, size_t input_size,
 
   static void (*const extra_hashes[4])(const void *, size_t, uint8_t *) = {
       blake_256, groestl_256, jh_256, skein_512_256};
-
-  extra_hashes[ctx0->hash_state[0] & 3](ctx0->hash_state, 200 * 8,
-                                        (uint8_t *)output);
+  const int final_hash_idx = ctx0->hash_state[0] & 3;
+  extra_hashes[final_hash_idx](ctx0->hash_state, 200 * 8, (uint8_t *)output);
 }
 
 struct cryptonight_ctx *cryptonight_ctx_new()

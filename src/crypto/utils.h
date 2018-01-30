@@ -18,15 +18,19 @@ static inline char hf_hex2bin(char c, bool *err)
   return 0;
 }
 
-static inline bool hex2bin(const char *in, size_t len, char *out)
+static inline bool hex2bin(const char *in, size_t len, char *out,
+                           size_t *out_len)
 {
   bool error = false;
-  for (size_t i = 0; i < len; i += 2) {
+  size_t i = 0, res = 0;
+  for (; i < len; i += 2, ++res) {
     out[i / 2] =
         (hf_hex2bin(in[i], &error) << 4) | hf_hex2bin(in[i + 1], &error);
-    if (error)
+    if (error) {
       return false;
+    }
   }
+  *out_len = res;
   return true;
 }
 

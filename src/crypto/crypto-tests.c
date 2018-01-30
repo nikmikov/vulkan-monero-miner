@@ -114,11 +114,26 @@ static const struct test_vector CRYPTONIGHT_TEST_VECTORS[] = {
     {.msg = "", .repeat = 0, .enc = ENC_STRING},
     {.msg = "This is a test", .repeat = 0, .enc = ENC_STRING},
     {.msg = "This is a test1", .repeat = 0, .enc = ENC_STRING},
-    {.msg = "This is a test66", .repeat = 0, .enc = ENC_HEX},
+    {.msg = "This is a test66", .repeat = 0, .enc = ENC_STRING},
     {.msg = "This is a test6", .repeat = 0, .enc = ENC_STRING},
     {.msg = "0606ebba9cd005f688598a3ad7ae62d6e150005ded336138b26417772375b1bd5d"
             "3c0bc480eeb000000005f3c91e30aab34cbacb1bbb3eecb8b4dfd5e799aa4407b8"
             "a0ea4ee397707bc51017",
+     .repeat = 0,
+     .enc = ENC_HEX},
+    {.msg = "0606cbe692d005ecfebc7d2249d2b43535c237c02359e888b8b05d2e980c140577"
+            "9241ac3ab48500000004e62a06e71559c98a37e7b6743465f4f72e42784c571941"
+            "1c935dc002e347826b05",
+     .repeat = 0,
+     .enc = ENC_HEX},
+    {.msg = "060687f092d005c5f46c239d1bd5a0667ee32d0687aa566644f81a491a31378fb0"
+            "f21d8ed5a7a38000000a75c2eacb144fd31b0050c9abb6a52e1e6b9d1692ce6c2f"
+            "8d2a5e0f01d69d908e15",
+     .repeat = 0,
+     .enc = ENC_HEX},
+    {.msg = "0606898093d005b6a7bbdd52bf852324ad3c1db10b09501043b3c6f9c436538c84"
+            "8827e65e13e300000008336118421c17ce50b0ea1fa51e4d2255c0b56d5eebc00b"
+            "4dd4a4ed600010685402",
      .repeat = 0,
      .enc = ENC_HEX},
 };
@@ -129,7 +144,10 @@ static const char *CRYPTONIGHT_256_RESULTS[] = {
     "236ebffb019ea9b19c9ff160775bc7a6ed090fce7103a32ee582d24a81db6960",
     "21fb4137747541810d5f8ce821b6dacf68eb3051778e68b5bcd990c21fa08fd6",
     "bfabcc134608782e8f7322972dba801267f841535372741b554356045910f614",
-    "038228f36441187229333dd71d3f1b672335ec526d2101cc5fc700692c6aa9cb"};
+    "038228f36441187229333dd71d3f1b672335ec526d2101cc5fc700692c6aa9cb",
+    "5de3f18eff8271adbd3b9848b49d71230d696c7ba6c735554af8e15330ab881b",
+    "55b4a3163cb2b0720b3b83bee0067dd088891d7fa116fe4c7250f004011c2d99",
+    "c8dcfae5547a922eba99a65692636b2fd17745b62fddb588fe684ee2f80bd8fd"};
 
 void do_sha3(const void *msg, size_t msg_len, uint8_t *digest)
 {
@@ -170,22 +188,21 @@ void do_cryptonight(const void *msg, size_t msg_len, uint8_t *digest)
 
 typedef void (*hash_fn)(const void *msg, size_t msg_len, uint8_t *digest);
 
-int test_single(const char *test_msg, size_t repeat, const char *expected,
-                hash_fn h)
+int test_single(const uint8_t *test_msg, size_t msg_len, size_t repeat,
+                const char *expected, hash_fn h)
 {
-  size_t msg_len = strlen(test_msg);
-  const char *msg = test_msg;
+  const uint8_t *msg = test_msg;
   if (repeat > 0) {
     size_t new_len = msg_len * repeat;
     msg = calloc(new_len, 1);
-    char *p = (char *)msg;
+    uint8_t *p = (uint8_t *)msg;
     for (size_t i = 0; i < repeat; ++i, p += msg_len) {
-      strncpy(p, test_msg, msg_len);
+      memcpy(p, test_msg, msg_len);
     }
     msg_len = new_len;
   }
   uint8_t digest[DIGEST_LENGTH_BYTES] = {0};
-  h((const uint8_t *)msg, msg_len, digest);
+  h(msg, msg_len, digest);
   if (msg != test_msg) {
     free((void *)msg);
   }
@@ -210,14 +227,17 @@ int test_hash_fn(const char *test_name, const struct test_vector *vectors,
     const struct test_vector *v = vectors + i;
     switch (v->enc) {
     case ENC_STRING:
-      failures += test_single(v->msg, v->repeat, expected[i], h);
+      failures += test_single((uint8_t *)v->msg, strlen(v->msg), v->repeat,
+                              expected[i], h);
       break;
     case ENC_HEX: {
       size_t msglen = strlen(v->msg);
-      char *msg = calloc(1, msglen);
-      hex2bin(v->msg, msglen, msg);
-      failures += test_single(msg, v->repeat, expected[i], h);
-      free(msg);
+      uint8_t *msgbin = calloc(1, msglen);
+      size_t msgbinlen = 0;
+      bool r = hex2bin(v->msg, msglen, (char *)msgbin, &msgbinlen);
+      assert(r && "Encoding hex to bin: success");
+      failures += test_single(msgbin, msgbinlen, v->repeat, expected[i], h);
+      free(msgbin);
     } break;
     }
   }
@@ -245,13 +265,12 @@ int main(int argc, char **argv)
   UNUSED_ARG(argv);
 
   int failures = 0;
-  // failures += test_hash("SHA-3", SHA3_256_RESULTS, do_sha3);
-  // failures += test_hash("Keccak", KECCAK_256_RESULTS, do_keccak);
-  // failures += test_hash("Blake", BLAKE_256_RESULTS, do_blake);
-  // failures += test_hash("Skein-512-256 REF", SKEIN_256_RESULTS,
-  // do_skein_ref);  failures += test_hash("Skein-512-256", SKEIN_256_RESULTS,
-  // do_skein);  failures += test_hash("JH", JH_256_RESULTS, do_jh);  failures +=
-  // test_hash("Groestl", GROESTL_256_RESULTS, do_groestl);
+  failures += test_hash("SHA-3", SHA3_256_RESULTS, do_sha3);
+  failures += test_hash("Keccak", KECCAK_256_RESULTS, do_keccak);
+  failures += test_hash("Blake", BLAKE_256_RESULTS, do_blake);
+  failures += test_hash("Skein-512-256", SKEIN_256_RESULTS, do_skein);
+  failures += test_hash("JH", JH_256_RESULTS, do_jh);
+  failures += test_hash("Groestl", GROESTL_256_RESULTS, do_groestl);
   failures += test_cryptonight();
   if (failures > 0) {
     printf("FAILURE: Tests failed: %d\n", failures);
