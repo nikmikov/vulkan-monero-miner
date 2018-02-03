@@ -35,25 +35,14 @@ inline static uint64_t target_to_difficulty(uint64_t t)
   return t > 0 ? 0xffffffffffffffff / t : 0;
 }
 
-inline static uint64_t t32_to_t64(uint32_t t)
-{
-  return 0xFFFFFFFFFFFFFFFFULL / (0xFFFFFFFFULL / ((uint64_t)t));
-}
-
 inline static uint64_t read_target(const char *str)
 {
-  size_t len = strlen(str);
-  if (len <= 8) {
-    uint32_t res = 0;
-    hex_to_binary(str, len, (uint8_t *)&res);
-    return t32_to_t64(res);
-  } else if (len <= 16) {
-    uint64_t res = 0;
-    hex_to_binary(str, len, (uint8_t *)&res);
-    return res;
-  } else {
-    return 0;
+  char *endptr = NULL;
+  uint64_t val = strtoull(str, &endptr, 16);
+  if (*endptr == '\0') {
+    return bswap_64(val);
   }
+  return 0;//error
 }
 
 void monero_miner_submit(struct monero_solver_solution *solution, void *data)
