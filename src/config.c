@@ -153,7 +153,8 @@ bool read_password(const cJSON *json, const char **password_address_ptr)
   assert(*password_address_ptr == NULL);
   const char *password_str = get_string_from_json(json, "password");
   if (password_str == NULL) {
-    return false;
+    *password_address_ptr = strdup("");
+    return true;
   }
   *password_address_ptr = strdup(password_str);
   return true;

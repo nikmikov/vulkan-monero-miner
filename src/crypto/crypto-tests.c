@@ -9,8 +9,7 @@
 #include "crypto/jh.h"
 #include "crypto/keccak-tiny.h"
 #include "crypto/skein.h"
-#include "utils/bin2hex.h"
-#include "utils/hex2bin.h"
+#include "utils/hex.h"
 
 #define UNUSED_ARG(a) ((void)a)
 #define DIGEST_LENGTH_BITS 256
@@ -209,7 +208,7 @@ int test_single(const uint8_t *test_msg, size_t msg_len, size_t repeat,
   }
 
   char digest_str[DIGEST_LENGTH_BYTES * 2 + 1] = {0};
-  bin2hex(digest, DIGEST_LENGTH_BYTES, digest_str);
+  hex_from_binary(digest, DIGEST_LENGTH_BYTES, digest_str);
   if (strncmp(expected, digest_str, DIGEST_LENGTH_BYTES * 2) != 0) {
     printf(" - FAIL: %s <> %s\n", expected, digest_str);
     return 1;
@@ -234,7 +233,7 @@ int test_hash_fn(const char *test_name, const struct test_vector *vectors,
     case ENC_HEX: {
       size_t msglen = strlen(v->msg);
       uint8_t *msgbin = calloc(1, msglen);
-      size_t msgbinlen = hex2bin(v->msg, msglen, msgbin);
+      size_t msgbinlen = hex_to_binary(v->msg, msglen, msgbin);
       assert(msgbinlen > 0 && "Encoding hex to bin: success");
       failures += test_single(msgbin, msgbinlen, v->repeat, expected[i], h);
       free(msgbin);

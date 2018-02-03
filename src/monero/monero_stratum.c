@@ -15,12 +15,13 @@
 #include "monero/monero_job.h"
 #include "monero/monero_result.h"
 #include "stratum.h"
+#include "utils/hex.h"
 #include "version.h"
 
 // json-rpc server response identifier
 enum monero_stratum_message_type {
   MONERO_STRATUM_MESSAGE_TYPE_LOGIN = 1,
-
+  MONERO_STRATUM_MESSAGE_TYPE_SUBMIT_SHARE = 2,
 };
 
 struct monero_stratum {
@@ -28,9 +29,9 @@ struct monero_stratum {
   const char *login;
   const char *password;
   struct stratum_event_handler *stratum_event_handler;
+  connection_handle connection;
+  const char *miner_id;
 };
-
-/*===================== Utility Functions ======================== */
 
 static inline monero_stratum_handle to_monero_stratum_handle(stratum_handle h)
 {
@@ -81,8 +82,6 @@ const char *get_job_string_field(const cJSON *json, const char *field,
   return NULL;
 }
 
-/*========================= Json Response Handling Functions
- * =================================== */
 void monero_stratum_handle_json_job(const cJSON *json,
                                     struct stratum_event_handler *event_handler)
 {
@@ -104,8 +103,8 @@ void monero_stratum_handle_json_job(const cJSON *json,
 }
 
 void monero_stratum_handle_json_login_response(
-    const cJSON *json, const char *err_msg,
-    struct stratum_event_handler *event_handler)
+    monero_stratum_handle monero_stratum, const cJSON *json,
+    const char *err_msg, struct stratum_event_handler *event_handler)
 {
   cJSON *miner_id_json = cJSON_GetObjectItem(json, "id");
   cJSON *job_json = cJSON_GetObjectItem(json, "job");
@@ -128,6 +127,10 @@ void monero_stratum_handle_json_login_response(
     event_handler->cb(&event.stratum_event, event_handler->data);
   } else {
     log_debug("Miner id: %s", miner_id_json->valuestring);
+    if (monero_stratum->miner_id != NULL) {
+      free((void *)monero_stratum->miner_id);
+    }
+    monero_stratum->miner_id = strdup(miner_id_json->valuestring);
     struct stratum_event_login_success event = {
         .stratum_event = {STRATUM_EVENT_LOGIN_SUCCESS}};
 
@@ -140,7 +143,8 @@ void monero_stratum_handle_json_login_response(
 
 /** Handle json-rpc response server */
 void monero_stratum_handle_json_response(
-    const cJSON *json, struct stratum_event_handler *event_handler)
+    monero_stratum_handle monero_stratum, const cJSON *json,
+    struct stratum_event_handler *event_handler)
 {
   cJSON *id_json = cJSON_GetObjectItem(json, "id");
   cJSON *error_json = cJSON_GetObjectItem(json, "error");
@@ -165,8 +169,11 @@ void monero_stratum_handle_json_response(
 
   switch (id_json->valueint) {
   case MONERO_STRATUM_MESSAGE_TYPE_LOGIN:
-    monero_stratum_handle_json_login_response(result_json, err_msg,
-                                              event_handler);
+    monero_stratum_handle_json_login_response(monero_stratum, result_json,
+                                              err_msg, event_handler);
+    break;
+  case MONERO_STRATUM_MESSAGE_TYPE_SUBMIT_SHARE:
+    log_info("Share accepted");
     break;
   default:
     log_error("Unregistered response id: %d", id_json->valueint);
@@ -179,16 +186,17 @@ void monero_stratum_handle_json_request(
     const char *method, const cJSON *params_json,
     struct stratum_event_handler *event_handler)
 {
-  if (strcmp(method, "job")) {
+  if (strcmp(method, "job") == 0) {
     log_debug("Received job request");
     monero_stratum_handle_json_job(params_json, event_handler);
   } else {
-    log_error("Unsupported method: %s", method);
+    log_error("Unsupported method: \"%s\"", method);
   }
 }
 
 /** Handle json-rpc message from server */
-void monero_stratum_handle_json(const cJSON *json,
+void monero_stratum_handle_json(monero_stratum_handle monero_stratum,
+                                const cJSON *json,
                                 struct stratum_event_handler *event_handler)
 {
   cJSON *method_json = cJSON_GetObjectItem(json, "method");
@@ -197,7 +205,7 @@ void monero_stratum_handle_json(const cJSON *json,
     monero_stratum_handle_json_request(
         method, cJSON_GetObjectItem(json, "params"), event_handler);
   } else {
-    monero_stratum_handle_json_response(json, event_handler);
+    monero_stratum_handle_json_response(monero_stratum, json, event_handler);
   }
 }
 
@@ -227,6 +235,7 @@ void monero_stratum_login(stratum_handle stratum, connection_handle connection,
   assert((size_t)len < buf.len);
   buf.len = (size_t)len;
   monero_stratum->stratum_event_handler = event_handler;
+  monero_stratum->connection = connection;
   connection_write(connection, buf);
 }
 
@@ -234,7 +243,31 @@ void monero_stratum_logout(stratum_handle stratum) { log_info("Logging out"); }
 
 void monero_stratum_submit(stratum_handle stratum, void *data)
 {
+  monero_stratum_handle monero_stratum = to_monero_stratum_handle(stratum);
   struct monero_result *result = data;
+  uv_buf_t buf;
+  buffer_alloc(NULL, BUFFER_DEFAULT_ALLOC_SIZE, &buf);
+
+  const char *submit_cmd =
+      "{\"id\":%d,\"jsonrpc\":\"2.0\",\"method\":\"submit\",\"params\":{"
+      "\"id\":\"%s\",\"job_id\":\"%s\",\"nonce\":\"%s\",\"result\":\"%s\"}}\n";
+
+  // convert nonce to LE hex
+  char nonce[9] = {0};
+  hex_from_binary(&result->nonce, 4, nonce);
+
+  int len = snprintf(
+      buf.base, buf.len, submit_cmd, MONERO_STRATUM_MESSAGE_TYPE_SUBMIT_SHARE,
+      monero_stratum->miner_id, result->job_id, nonce, result->hash);
+  log_debug("Prepared submit command(sz: %d): %s", len, buf.base);
+  if (len < 0) {
+    // error
+    log_error("TODO: handle error");
+    return;
+  }
+  assert((size_t)len < buf.len);
+  buf.len = (size_t)len;
+  connection_write(monero_stratum->connection, buf);
 }
 
 void monero_stratum_new_payload(stratum_handle stratum, const uv_buf_t *buf)
@@ -257,7 +290,8 @@ void monero_stratum_new_payload(stratum_handle stratum, const uv_buf_t *buf)
     return;
   }
   log_debug("Parsing server json response. Success");
-  monero_stratum_handle_json(json, monero_stratum->stratum_event_handler);
+  monero_stratum_handle_json(monero_stratum, json,
+                             monero_stratum->stratum_event_handler);
   cJSON_Delete(json);
 }
 
@@ -289,6 +323,9 @@ void monero_stratum_free(monero_stratum_handle *stratum)
   }
   if (handle->password) {
     free((void *)handle->password);
+  }
+  if (handle->miner_id) {
+    free((void *)handle->miner_id);
   }
   free(handle);
   *stratum = NULL;
