@@ -8,7 +8,7 @@
 
 #include <uv.h>
 
-#include "config.h"
+#include "config/config.h"
 #include "connection.h"
 
 enum stratum_event_type {

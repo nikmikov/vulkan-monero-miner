@@ -1,6 +1,6 @@
 #pragma once
 
-#include "config.h"
+#include "config/config.h"
 
 enum miner_event_type {
   MINER_EVENT_RESULT_FOUND,

@@ -7,7 +7,7 @@
 
 #include <uv.h>
 
-#include "config.h"
+#include "config/config.h"
 
 enum connection_event_type {
   CONNECTION_EVENT_NOEVENT,

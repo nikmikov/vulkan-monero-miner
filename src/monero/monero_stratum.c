@@ -9,7 +9,7 @@
 #include "cJSON/cJSON.h"
 
 #include "buffer.h"
-#include "config.h"
+#include "config/config.h"
 
 #include "logging.h"
 #include "monero/monero_job.h"
@@ -22,6 +22,7 @@
 enum monero_stratum_message_type {
   MONERO_STRATUM_MESSAGE_TYPE_LOGIN = 1,
   MONERO_STRATUM_MESSAGE_TYPE_SUBMIT_SHARE = 2,
+  MONERO_STRATUM_MESSAGE_TYPE_KEEPALIVE = 3
 };
 
 struct monero_stratum {
@@ -174,6 +175,9 @@ void monero_stratum_handle_json_response(
     break;
   case MONERO_STRATUM_MESSAGE_TYPE_SUBMIT_SHARE:
     log_info("Share accepted");
+    break;
+  case MONERO_STRATUM_MESSAGE_TYPE_KEEPALIVE:
+    log_info("Heartbeat received");
     break;
   default:
     log_error("Unregistered response id: %d", id_json->valueint);

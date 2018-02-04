@@ -4,7 +4,7 @@
 #include <uv.h>
 
 #include "cli_opts.h"
-#include "config.h"
+#include "config/config.h"
 #include "console.h"
 #include "foreman.h"
 #include "logging.h"
