@@ -131,6 +131,7 @@ void on_tcp_connect(uv_connect_t *req, int status)
     tcp_connection_connect_failed(conn, status);
   } else {
     assert((void *)req->handle == (void *)&conn->socket);
+    uv_tcp_keepalive(&conn->socket, 1, 5);
     tcp_connection_connect_success(conn);
   }
 }
@@ -160,9 +161,10 @@ void on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf)
 void on_write(uv_write_t *req, int status)
 {
   if (status < 0) {
-    log_error("Error writing to socket; %s", uv_strerror(status));
+    log_error("Error writing to socket: %s", uv_strerror(status));
+  } else {
+    log_debug("Writing to socket. Complete");
   }
-  log_debug("Writing to socket. Complete");
   write_req_t *wr = (write_req_t *)req;
   free(wr->buf.base);
   free(wr);
@@ -382,7 +384,12 @@ void connection_write(connection_handle handle, uv_buf_t data)
   write_req_t *req = calloc(1, sizeof(write_req_t));
   req->buf = data;
   log_debug("Writing to socket");
-  uv_write((uv_write_t *)req, s, &req->buf, 1, on_write);
+  int status = uv_write((uv_write_t *)req, s, &req->buf, 1, on_write);
+  if(status < 0) {
+    log_error("Error when queueing write: %s", uv_strerror(status));
+    free(req->buf.base);
+    free(req);
+  }
 }
 
 void connection_free(connection_handle *handle)
