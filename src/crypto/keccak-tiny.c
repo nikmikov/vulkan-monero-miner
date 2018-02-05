@@ -183,4 +183,4 @@ defsha3(512)
 /*** pre-FIPS202 Keccak standard ***/
 defkeccak(256)
 
-// clang-format on
+    // clang-format on

@@ -385,7 +385,7 @@ void connection_write(connection_handle handle, uv_buf_t data)
   req->buf = data;
   log_debug("Writing to socket");
   int status = uv_write((uv_write_t *)req, s, &req->buf, 1, on_write);
-  if(status < 0) {
+  if (status < 0) {
     log_error("Error when queueing write: %s", uv_strerror(status));
     free(req->buf.base);
     free(req);

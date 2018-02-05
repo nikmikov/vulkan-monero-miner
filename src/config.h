@@ -16,12 +16,6 @@ enum stratum_protocol {
 
 enum backend { BACKEND_CPU, BACKEND_CUDA, BACKEND_OPENCL };
 
-/** Root config */
-struct config {
-  size_t size;
-  struct config_miner *miners;
-};
-
 /** Single host */
 struct config_pool {
   const char *host;
@@ -35,18 +29,20 @@ struct config_pool_list {
   struct config_pool *pools;
 };
 
-/** Single miner config */
-struct config_miner {
+/** Linked list of miners configurations  */
+struct config {
+  struct config *next;
   enum currency currency;
   enum stratum_protocol protocol;
   const char *wallet;
   const char *password;
   const char name[32];
   struct config_pool_list pool_list;
+
+  void (*free)(struct config *);
 };
 
-bool stratum_protocol_from_string(const char *str, enum stratum_protocol *out);
+/** return NULL if not able to recognize protocol */
+// enum stratum_protocol *stratum_protocol_from_string(const char *str);
 
-bool config_from_file(const char *filename, struct config **cfg);
-
-void config_free(struct config *cfg);
+struct config *config_from_file(const char *filename);

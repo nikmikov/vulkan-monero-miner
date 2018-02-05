@@ -35,8 +35,8 @@ DORENOM_LD=$(CC) $(FINAL_LDFLAGS)
 
 DORENOM_EXECUTABLE=dorenom
 CRYPTONIGHT_OBJS=crypto/blake.o crypto/jh.o crypto/groestl.o crypto/cryptonight/cryptonight.o crypto/keccak-tiny.o crypto/skein.o
-MONERO_OBJS=monero/monero_miner.o monero/monero_stratum.o monero/monero_solver_cpu.o $(CRYPTONIGHT_OBJS)
-DORENOM_OBJS=buffer.o cli_opts.o config/config.o connection.o console.o currency.o cJSON/cJSON.o dorenom.o foreman.o miner.o stratum.o $(MONERO_OBJS)
+MONERO_OBJS=monero/monero_config.o monero/monero_miner.o monero/monero_stratum.o monero/monero_solver_cpu.o $(CRYPTONIGHT_OBJS)
+DORENOM_OBJS=buffer.o cli_opts.o config.o connection.o console.o currency.o cJSON/cJSON.o dorenom.o foreman.o miner.o stratum.o $(MONERO_OBJS)
 
 CRYPTO_TESTS=crypto-tests
 CRYPTO_TESTS_OBJS=crypto/crypto-tests.o $(CRYPTONIGHT_OBJS)

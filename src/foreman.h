@@ -1,12 +1,12 @@
 #pragma once
 
-#include "config/config.h"
+#include "config.h"
 
 struct foreman;
 
 typedef struct foreman *foreman_handle;
 
-foreman_handle foreman_init(const struct config_miner *cfg);
+foreman_handle foreman_init(const struct config *cfg);
 
 /** free resource and reset handle to NULL*/
 void foreman_free(foreman_handle *foreman);

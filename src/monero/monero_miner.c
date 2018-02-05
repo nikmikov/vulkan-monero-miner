@@ -13,8 +13,6 @@
 #include "utils/byteswap.h"
 #include "utils/hex.h"
 
-#define MONERO_NONCE_POSITION 39
-
 struct monero_miner {
   struct miner miner;
 
@@ -42,7 +40,7 @@ inline static uint64_t read_target(const char *str)
   if (*endptr == '\0') {
     return bswap_64(val);
   }
-  return 0;//error
+  return 0; // error
 }
 
 void monero_miner_submit(struct monero_solver_solution *solution, void *data)
@@ -142,7 +140,7 @@ FREE:
   free(input_hash);
 }
 
-miner_handle monero_miner_new(const struct config_miner *cfg)
+miner_handle monero_miner_new(const struct monero_config *cfg)
 {
   assert(cfg != NULL);
   struct monero_miner *monero_miner = calloc(1, sizeof(struct monero_miner));
@@ -152,7 +150,7 @@ miner_handle monero_miner_new(const struct config_miner *cfg)
   miner->free = monero_miner_free;
 
   // TODO: proper initialization based on config
-  monero_miner->solvers_len = 4;
+  monero_miner->solvers_len = 1;
   monero_miner->nonce_chunk_size =
       0xffffffff / (uint32_t)(monero_miner->solvers_len + 1);
   monero_miner->solvers = calloc(2, sizeof(struct monero_solver **));

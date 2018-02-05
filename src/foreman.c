@@ -9,7 +9,7 @@
 #include "stratum.h"
 
 struct foreman {
-  const struct config_miner *cfg;
+  const struct config *cfg;
   connection_handle connection;
   struct connection_event_handler connection_event_handler;
   stratum_handle stratum;
@@ -98,7 +98,7 @@ void on_connection_event(enum connection_event_type event,
   }
 }
 
-foreman_handle foreman_init(const struct config_miner *cfg)
+foreman_handle foreman_init(const struct config *cfg)
 {
   log_debug("Initializing foreman: %s", cfg->name);
   connection_handle pool_connection = connection_init(&cfg->pool_list);

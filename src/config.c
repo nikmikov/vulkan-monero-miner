@@ -8,16 +8,17 @@
 #include "logging.h"
 
 #include "cJSON/cJSON.h"
+#include "monero/monero_config.h"
 
 bool stratum_protocol_from_string(const char *str, enum stratum_protocol *out)
 {
   if (strcmp(str, "stratum-ethereum") == 0) {
     *out = STRATUM_PROTOCOL_ETHEREUM;
     return true;
-  } else if (strcmp(str, "stratum-monero")) {
+  } else if (strcmp(str, "stratum-monero") == 0) {
     *out = STRATUM_PROTOCOL_MONERO;
     return true;
-  } else if (strcmp(str, "stratum-zcash")) {
+  } else if (strcmp(str, "stratum-zcash") == 0) {
     *out = STRATUM_PROTOCOL_ZCASH;
     return true;
   } else {
@@ -27,8 +28,7 @@ bool stratum_protocol_from_string(const char *str, enum stratum_protocol *out)
 }
 
 /** Read file into char* array. Caller is responsible of freeing the allocated
- * memory
- */
+ * memory */
 char *read_text_file(const char *filename)
 {
   FILE *fp = fopen(filename, "r");
@@ -59,8 +59,7 @@ char *read_text_file(const char *filename)
   return buffer;
 }
 
-/** Read boolean field from json, return false if field does not exists
- */
+/** Read boolean field from json, return false if field does not exists */
 bool read_bool_from_json(const cJSON *json, const char *field, bool *out)
 {
   if (!cJSON_HasObjectItem(json, field)) {
@@ -77,8 +76,7 @@ bool read_bool_from_json(const cJSON *json, const char *field, bool *out)
   return true;
 }
 
-/** Get a string field from json, return NULL if the field does not exists
- */
+/** Get a string field from json, return NULL if the field does not exists */
 const char *get_string_from_json(const cJSON *json, const char *field)
 {
   if (!cJSON_HasObjectItem(json, field)) {
@@ -94,8 +92,7 @@ const char *get_string_from_json(const cJSON *json, const char *field)
   return item->valuestring;
 }
 
-/** Get array field from json, return NULL if the field does not exists
- */
+/** Get array field from json, return NULL if the field does not exists */
 const cJSON *get_array_from_json(const cJSON *json, const char *field)
 {
   if (!cJSON_HasObjectItem(json, field)) {
@@ -111,8 +108,7 @@ const cJSON *get_array_from_json(const cJSON *json, const char *field)
   return item;
 }
 
-/** Read "currency" field from json
- */
+/** Read "currency" field from json */
 bool read_currency(const cJSON *json, enum currency *currency_ptr)
 {
   const char *currency_str = get_string_from_json(json, "currency");
@@ -122,8 +118,7 @@ bool read_currency(const cJSON *json, enum currency *currency_ptr)
   return currency_from_name(currency_str, currency_ptr);
 }
 
-/** Read "protocol" field from json
- */
+/** Read "protocol" field from json */
 bool read_protocol(const cJSON *json, enum stratum_protocol *protocol_ptr)
 {
   const char *protocol_str = get_string_from_json(json, "protocol");
@@ -133,8 +128,7 @@ bool read_protocol(const cJSON *json, enum stratum_protocol *protocol_ptr)
   return stratum_protocol_from_string(protocol_str, protocol_ptr);
 }
 
-/** Read "wallet" field from json
- */
+/** Read "wallet" field from json */
 bool read_wallet(const cJSON *json, const char **wallet_address_ptr)
 {
   assert(*wallet_address_ptr == NULL);
@@ -146,8 +140,7 @@ bool read_wallet(const cJSON *json, const char **wallet_address_ptr)
   return true;
 }
 
-/** Read "password" field from json.
- */
+/** Read "password" field from json. */
 bool read_password(const cJSON *json, const char **password_address_ptr)
 {
   assert(*password_address_ptr == NULL);
@@ -160,8 +153,7 @@ bool read_password(const cJSON *json, const char **password_address_ptr)
   return true;
 }
 
-/** Read pool config from json
- */
+/** Read pool config from json */
 bool read_pool(const cJSON *json, struct config_pool *pool)
 {
   assert(pool->host == NULL);
@@ -174,7 +166,6 @@ bool read_pool(const cJSON *json, struct config_pool *pool)
   if (host == NULL) {
     return false;
   }
-
   const char *port = get_string_from_json(json, "port");
   if (port == NULL) {
     return false;
@@ -184,8 +175,7 @@ bool read_pool(const cJSON *json, struct config_pool *pool)
   return true;
 }
 
-/** Read pool list from json
- */
+/** Read pool list from json */
 bool read_pool_list(const cJSON *json, struct config_pool_list *pool_list)
 {
   assert(pool_list->size == 0);
@@ -210,151 +200,105 @@ bool read_pool_list(const cJSON *json, struct config_pool_list *pool_list)
   return true;
 }
 
-/** TODO: comment here
- */
-bool read_miner(const cJSON *json, struct config_miner *cfg)
+struct config *config_from_json(const cJSON *json)
 {
+  assert(json != NULL);
+
   if (!cJSON_IsObject(json)) {
-    log_error("Config parse: \"miners\" list: Expected an object");
-    return false;
+    log_error("Config parse: Miner: Expected object");
+    return NULL;
   }
 
-  return read_currency(json, &cfg->currency) &&
-         read_protocol(json, &cfg->protocol) &&
-         read_wallet(json, &cfg->wallet) &&
-         read_password(json, &cfg->password) &&
-         read_pool_list(json, &cfg->pool_list);
+  enum currency currency;
+  if (!read_currency(json, &currency)) {
+    return NULL;
+  }
+
+  struct config *result = NULL;
+  switch (currency) {
+  case CURRENCY_XMR:
+    result = monero_config_from_json(json);
+    break;
+  case CURRENCY_ETH:
+    log_error("Ethereum is not supported yet.");
+    break;
+  case CURRENCY_ZEC:
+    log_error("ZCash is not supported yet.");
+    break;
+  }
+  if (result == NULL) {
+    return NULL;
+  }
+  assert(result->next == NULL);
+
+  // read generic fields
+  bool succ = read_protocol(json, &result->protocol) &&
+              read_wallet(json, &result->wallet) &&
+              read_password(json, &result->password) &&
+              read_pool_list(json, &result->pool_list);
+
+  if (!succ) {
+    result->free(result);
+    result = NULL;
+  }
+  return result;
 }
 
-/** TODO: comment here
- */
-bool config_from_json(const cJSON *json, struct config *cfg)
-{
-  assert(cfg->size == 0);
-
-  if (!cJSON_IsArray(json)) {
-    log_error("Config parse: Expected array of miners");
-    return false;
-  }
-
-  int size = cJSON_GetArraySize(json);
-  if (size <= 0) {
-    log_error("Config parse: Empty config");
-    return false;
-  }
-
-  log_debug("Config parse: entries found: %d", size);
-  cfg->miners = calloc(size, sizeof(struct config_miner));
-  for (int i = 0; i < size; ++i, ++cfg->size) {
-    log_debug("Config parse: parsing miner entry #%d", i);
-    cJSON *miner_json = cJSON_GetArrayItem(json, i);
-    assert(miner_json != NULL);
-    struct config_miner *miner = &cfg->miners[i];
-    if (!read_miner(miner_json, miner)) {
-      return false;
-    } else {
-      const char *currency_name = currency_get_info(miner->currency)->name;
-      snprintf((char *)miner->name, sizeof(miner->name), "%s~%d", currency_name,
-               i);
-#ifndef NDEBUG
-      log_debug("- miner: #%d:", i);
-      log_debug("    protocol: %d", miner->protocol);
-      log_debug("    currency: %s", currency_name);
-      log_debug("    wallet: %s", miner->wallet);
-      log_debug("    password: %s", miner->password);
-      log_debug("    pool(%d):", miner->pool_list.size);
-      for (size_t j = 0; j < miner->pool_list.size; ++j) {
-        const struct config_pool *pool = &miner->pool_list.pools[j];
-        log_debug("      - host: %s", pool->host);
-        log_debug("        port: %s", pool->port);
-        log_debug("        tls: %s", pool->use_tls ? "true" : "false");
-      }
-#endif
-    }
-  }
-
-  return true;
-}
-
-/** Read config from null terminated string
- */
-bool config_from_string(const char *json_str, struct config **cfg_ptr)
+/** Read config from null terminated string */
+struct config *config_from_string(const char *json_str)
 {
   log_debug("Parsing config file: %s", json_str);
   bool success = false;
   const char *parse_end;
   cJSON *json_root = cJSON_ParseWithOpts(json_str, &parse_end, true);
-
-  if (json_root != NULL) {
-    log_debug("Successfully parsed config json");
-    struct config *cfg = calloc(1, sizeof(struct config));
-
-    if (config_from_json(json_root, cfg)) {
-      *cfg_ptr = cfg;
-      success = true;
-    } else {
-      config_free(cfg);
-    }
-  } else {
-    // error
+  if (json_root == NULL) {
     log_error("Json parse error: %s", cJSON_GetErrorPtr());
+    return NULL;
+  }
+  log_debug("Successfully parsed config json");
+
+  struct config *result = NULL;
+
+  if (!cJSON_IsArray(json_root)) {
+    log_error("Config parse: Expected array of miners");
+    cJSON_Delete(json_root);
+    return NULL;
+  }
+
+  int size = cJSON_GetArraySize(json_root);
+  if (size <= 0) {
+    log_error("Config parse: Empty config");
+    cJSON_Delete(json_root);
+    return NULL;
+  }
+  log_debug("Config parse: entries found: %d", size);
+  for (int i = size - 1; i >= 0; --i) {
+    // parse config
+    log_debug("Config parse: parsing miner entry #%d", i);
+    cJSON *miner_json = cJSON_GetArrayItem(json_root, i);
+    struct config *cfg = config_from_json(miner_json);
+    if (cfg == NULL && result != NULL) {
+      result->free(result);
+      result = NULL;
+      break;
+    }
+    cfg->next = result;
+    result = cfg;
   }
 
   cJSON_Delete(json_root);
-  return success;
+  return result;
 }
 
-/** Read config from file
- */
-bool config_from_file(const char *filename, struct config **cfg_ptr)
+struct config *config_from_file(const char *filename)
 {
   log_debug("Reading config file: %s", filename);
-  assert(*cfg_ptr == NULL);
   char *json_str = read_text_file(filename);
   if (!json_str) {
     return false;
   }
 
-  bool success = config_from_string(json_str, cfg_ptr);
+  struct config *res = config_from_string(json_str);
   free(json_str);
-  return success;
-}
-
-void config_pool_free(struct config_pool *pool)
-{
-  assert(pool != NULL);
-  free((void *)pool->host);
-  free((void *)pool->port);
-}
-
-void config_miner_free(struct config_miner *miner)
-{
-  assert(miner != NULL);
-  if (miner->wallet) {
-    free((void *)miner->wallet);
-  }
-  if (miner->password) {
-    free((void *)miner->password);
-  }
-  if (miner->pool_list.pools != NULL) {
-    for (size_t i = 0; i < miner->pool_list.size; ++i) {
-      config_pool_free(&miner->pool_list.pools[i]);
-    }
-
-    free(miner->pool_list.pools);
-  }
-}
-
-/** Free memory
- */
-void config_free(struct config *cfg)
-{
-  assert(cfg != NULL);
-  if (cfg->size > 0) {
-    for (size_t i = 0; i < cfg->size; ++i) {
-      config_miner_free(&cfg->miners[i]);
-    }
-    free(cfg->miners);
-  }
-  free(cfg);
+  return res;
 }

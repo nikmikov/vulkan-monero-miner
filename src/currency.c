@@ -25,7 +25,6 @@ const struct currency_info *currency_get_info(enum currency currency)
 bool currency_from_name(const char *str, enum currency *out)
 {
   for (size_t i = 0; i < CURRENCIES_SIZE; ++i) {
-    log_debug("Comparing: %s with %s", supported_currencies[i].name, str);
     if (strcmp(supported_currencies[i].name, str) == 0) {
       *out = supported_currencies[i].currency;
       return true;

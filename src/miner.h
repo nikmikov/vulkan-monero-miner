@@ -1,6 +1,6 @@
 #pragma once
 
-#include "config/config.h"
+#include "config.h"
 
 enum miner_event_type {
   MINER_EVENT_RESULT_FOUND,
@@ -32,4 +32,4 @@ struct miner {
   void (*free)(miner_handle *);
 };
 
-miner_handle miner_new(const struct config_miner *cfg);
+miner_handle miner_new(const struct config *cfg);

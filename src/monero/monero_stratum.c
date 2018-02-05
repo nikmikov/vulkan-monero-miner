@@ -9,7 +9,7 @@
 #include "cJSON/cJSON.h"
 
 #include "buffer.h"
-#include "config/config.h"
+#include "config.h"
 
 #include "logging.h"
 #include "monero/monero_job.h"

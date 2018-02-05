@@ -8,7 +8,7 @@
 
 #include <uv.h>
 
-#include "config/config.h"
+#include "config.h"
 #include "connection.h"
 
 enum stratum_event_type {
@@ -63,6 +63,6 @@ struct stratum_event_handler {
   stratum_event_cb cb;
 };
 
-stratum_handle stratum_new(const struct config_miner *cfg);
+stratum_handle stratum_new(const struct config *cfg);
 
 void stratum_free(stratum_handle *);

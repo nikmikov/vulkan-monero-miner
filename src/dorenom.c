@@ -4,7 +4,7 @@
 #include <uv.h>
 
 #include "cli_opts.h"
-#include "config/config.h"
+#include "config.h"
 #include "console.h"
 #include "foreman.h"
 #include "logging.h"
@@ -50,7 +50,6 @@ void on_sigint_received(uv_signal_t *handle, int signum)
 
 int main(int argc, char **argv)
 {
-
   // parse options
   struct cli_opts cli_opts = {0};
   parse_cli_opts(argc, argv, &cli_opts);
@@ -58,18 +57,23 @@ int main(int argc, char **argv)
   // TODO: init console
 
   // read config
-  struct config *cfg = NULL;
-  if (!config_from_file(cli_opts.config_file, &cfg)) {
+  struct config *cfg = config_from_file(cli_opts.config_file);
+  if (cfg == NULL) {
     log_error("Error when reading config.");
     exit(1);
   }
-
-  assert(cfg->size > 0);
+  size_t cfg_size = 0;
+  for (struct config *p = cfg; p != NULL; ++cfg_size) {
+    p = p->next;
+  }
+  assert(cfg_size > 0);
 
   int exit_code = 0;
-  foreman_handle *foremans = calloc(cfg->size, sizeof(foreman_handle));
-  for (size_t i = 0; i < cfg->size; ++i) {
-    foremans[i] = foreman_init(&cfg->miners[i]);
+  foreman_handle *foremans = calloc(cfg_size, sizeof(foreman_handle));
+
+  struct config *p = cfg;
+  for (size_t i = 0; i < cfg_size; ++i, p = p->next) {
+    foremans[i] = foreman_init(p);
     if (foremans[i] == NULL) {
       exit_code = 1;
       goto SHUTDOWN;
@@ -92,7 +96,7 @@ int main(int argc, char **argv)
 
   pool_connection_connect(h);*/
 
-  for (size_t i = 0; i < cfg->size; ++i) {
+  for (size_t i = 0; i < cfg_size; ++i) {
     foreman_start(foremans[i]);
   }
 
@@ -100,14 +104,16 @@ int main(int argc, char **argv)
   uv_run(loop, UV_RUN_DEFAULT);
 SHUTDOWN:
   log_debug("Shutting down.");
-  for (size_t i = 0; i < cfg->size; ++i) {
+  for (size_t i = 0; i < cfg_size; ++i) {
     if (foremans[i]) {
       foreman_stop(foremans[i]);
       foreman_free(&foremans[i]);
     }
   }
   free(foremans);
-  config_free(cfg);
+  if (cfg != NULL) {
+    cfg->free(cfg);
+  }
 
   return exit_code;
 }

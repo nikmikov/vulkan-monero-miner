@@ -5,7 +5,7 @@
 #include "logging.h"
 #include "monero/monero_stratum.h"
 
-stratum_handle stratum_new(const struct config_miner *cfg)
+stratum_handle stratum_new(const struct config *cfg)
 {
   switch (cfg->protocol) {
   case STRATUM_PROTOCOL_MONERO:

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "config/config.h"
 #include "miner.h"
+#include "monero/monero_config.h"
 
-miner_handle monero_miner_new(const struct config_miner *cfg);
+miner_handle monero_miner_new(const struct monero_config *cfg);

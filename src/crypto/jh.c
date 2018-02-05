@@ -15,7 +15,7 @@
 
 #include "crypto/jh_const.h"
 
-#define CONSTANT(b) _mm_set1_epi8((b))
+#define CONSTANT(b) _mm_set1_epi8((char)(b))
 #define XOR(x, y) _mm_xor_si128((x), (y))
 #define AND(x, y) _mm_and_si128((x), (y))
 #define OR(x, y) _mm_or_si128((x), (y))

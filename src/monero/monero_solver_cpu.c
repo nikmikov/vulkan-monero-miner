@@ -47,13 +47,13 @@ struct monero_solver_cpu {
   int hashes_prev;
 };
 
-void monero_solver_metrics_callback(uv_timer_t* handle)
+void monero_solver_metrics_callback(uv_timer_t *handle)
 {
   struct monero_solver_cpu *solver = handle->data;
-  int  hashes_processed = atomic_load(&solver->hashes_processed);
+  int hashes_processed = atomic_load(&solver->hashes_processed);
   int hashrate = hashes_processed - solver->hashes_prev;
   solver->hashes_prev = hashes_processed;
-  log_info("Hashrate: %dH/sec", hashrate/5);
+  log_info("Hashrate: %dH/sec", hashrate / 5);
 }
 
 /** Called from worker thread on main loop when solution found */
@@ -180,7 +180,6 @@ void monero_solver_cpu_free(struct monero_solver *ptr)
   uv_mutex_destroy(&solver->solution_lock);
   cryptonight_ctx_free(&solver->cryptonight_ctx);
 
-
   free(solver);
 }
 
@@ -204,6 +203,7 @@ struct monero_solver *monero_solver_new_cpu()
   atomic_store(&solver_cpu->hashes_processed, 0);
   uv_timer_init(uv_default_loop(), &solver_cpu->timer_req);
   solver_cpu->timer_req.data = solver_cpu;
-  uv_timer_start(&solver_cpu->timer_req, *monero_solver_metrics_callback, 5000, 5000);
+  uv_timer_start(&solver_cpu->timer_req, *monero_solver_metrics_callback, 5000,
+                 5000);
   return (struct monero_solver *)solver_cpu;
 }
