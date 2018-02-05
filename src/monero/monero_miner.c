@@ -151,7 +151,6 @@ miner_handle monero_miner_new(const struct monero_config *cfg)
   miner->new_job = monero_miner_new_job;
   miner->free = monero_miner_free;
 
-  // TODO: proper initialization based on config
   size_t solvers_len = 0;
   struct monero_config_solver *p = cfg->solvers_list;
   for (; p != NULL; p = p->next, ++solvers_len)

@@ -10,6 +10,7 @@
 #include "crypto/cryptonight/cryptonight.h"
 #include "logging.h"
 #include "monero/monero_config.h"
+#include "utils/affinity.h"
 
 #define SOLUTIONS_BUFFER_SIZE 32
 
@@ -187,7 +188,8 @@ void monero_solver_cpu_free(struct monero_solver *ptr)
 struct monero_solver *
 monero_solver_new_cpu(const struct monero_config_solver_cpu *cfg)
 {
-  log_debug("Starting CPU solver, affinity: %d", cfg->solver.affine_to_cpu);
+  assert(cfg != NULL);
+
   struct monero_solver_cpu *solver_cpu =
       calloc(1, sizeof(struct monero_solver_cpu));
   atomic_store(&solver_cpu->job_id, 0);
@@ -202,6 +204,16 @@ monero_solver_new_cpu(const struct monero_config_solver_cpu *cfg)
   solver_cpu->solution_found_async.data = solver_cpu;
   uv_thread_create(&solver_cpu->worker, monero_solver_cpu_work_thread,
                    solver_cpu);
+
+  int affinity = cfg->solver.affine_to_cpu;
+  if (affinity >= 0) {
+    bool r = uv_thread_set_affinity(solver_cpu->worker, (uint64_t)affinity);
+    if (!r) {
+      log_warn("CPU affinity not set");
+    } else {
+      log_info("Set CPU affinity: %d", affinity);
+    }
+  }
 
   atomic_store(&solver_cpu->hashes_processed, 0);
   uv_timer_init(uv_default_loop(), &solver_cpu->timer_req);
