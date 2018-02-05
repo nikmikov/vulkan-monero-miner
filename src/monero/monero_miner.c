@@ -72,7 +72,9 @@ void monero_miner_free(miner_handle *handle)
   if (miner->solvers_len > 0) {
     for (size_t i = 0; i < miner->solvers_len; ++i) {
       struct monero_solver *solver = miner->solvers[i];
-      solver->free(solver);
+      if (solver != NULL) {
+        solver->free(solver);
+      }
     }
     free(miner->solvers);
   }
@@ -150,13 +152,33 @@ miner_handle monero_miner_new(const struct monero_config *cfg)
   miner->free = monero_miner_free;
 
   // TODO: proper initialization based on config
-  monero_miner->solvers_len = 1;
+  size_t solvers_len = 0;
+  struct monero_config_solver *p = cfg->solvers_list;
+  for (; p != NULL; p = p->next, ++solvers_len)
+    ;
+
+  monero_miner->solvers_len = solvers_len;
   monero_miner->nonce_chunk_size =
       0xffffffff / (uint32_t)(monero_miner->solvers_len + 1);
-  monero_miner->solvers = calloc(2, sizeof(struct monero_solver **));
-  for (size_t i = 0; i < monero_miner->solvers_len; ++i) {
-    monero_miner->solvers[i] = monero_solver_new_cpu();
+  monero_miner->solvers = calloc(solvers_len, sizeof(struct monero_solver **));
+  p = cfg->solvers_list;
+  for (size_t i = 0; i < monero_miner->solvers_len; ++i, p = p->next) {
+    switch (p->solver_type) {
+    case MONERO_CONFIG_SOLVER_CPU:
+      monero_miner->solvers[i] =
+          monero_solver_new_cpu((const struct monero_config_solver_cpu *)p);
+      break;
+    case MONERO_CONFIG_SOLVER_CL:
+      log_error("Monero CL solver is not suported yet");
+      goto ERROR;
+    case MONERO_CONFIG_SOLVER_CUDA:
+      log_error("Monero CUDA solver is not suported yet");
+      goto ERROR;
+    }
   }
 
   return miner;
+ERROR:
+  monero_miner_free(&miner);
+  return NULL;
 }

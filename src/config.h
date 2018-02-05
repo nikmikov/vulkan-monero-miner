@@ -42,7 +42,4 @@ struct config {
   void (*free)(struct config *);
 };
 
-/** return NULL if not able to recognize protocol */
-// enum stratum_protocol *stratum_protocol_from_string(const char *str);
-
 struct config *config_from_file(const char *filename);

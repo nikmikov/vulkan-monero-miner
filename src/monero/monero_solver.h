@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "monero/monero.h"
+#include "monero/monero_config.h"
 
 struct monero_solver_solution {
   int job_id;
@@ -23,4 +24,5 @@ struct monero_solver {
 };
 
 /** new monero cpu kernel */
-struct monero_solver *monero_solver_new_cpu();
+struct monero_solver *
+monero_solver_new_cpu(const struct monero_config_solver_cpu *cfg);

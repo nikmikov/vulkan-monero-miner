@@ -1,20 +1,17 @@
 [{
     "currency": "Monero",
-    "protocol": "stratum_monero",
-    "wallet":"41ssDghM2vkiyk9m6c3WgbNjBsnse8xni3o6xz2uC9eeJK9FfLebMtvQNyPLxJ8DvA1wt9Qw6ycPCZ5agXKXht1272uMYF2.test",
+    "protocol": "stratum-monero",
+    "wallet":"41ssDghM2vkiyk9m6c3WgbNjBsnse8xni3o6xz2uC9eeJK9FfLebMtvQNyPLxJ8DvA1wt9Qw6ycPCZ5agXKXht1272uMYF2.test+10000",
     "pool_list": [
       {
-        "host": "mine.xmrpool.net",
-        "port": "80",
+        "host": "pool.minexmr.com",
+        "port": "4444",
         "use_tls": false,
-        "password": "test_user@gmail.com",
         "pool_weight": 999
-      },
-      {
-        "host": "des.minexmr.com",
-        "port": "80",
-        "use_tls": true,
-        "pool_weight": 10
       }
+    ],
+    "solvers": [
+       {"cpu": {"affine_to_cpu": 0}},
+       {"cpu": {"affine_to_cpu": 2}}
     ]
 }]

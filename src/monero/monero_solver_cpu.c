@@ -9,6 +9,7 @@
 
 #include "crypto/cryptonight/cryptonight.h"
 #include "logging.h"
+#include "monero/monero_config.h"
 
 #define SOLUTIONS_BUFFER_SIZE 32
 
@@ -87,7 +88,7 @@ void monero_solver_cpu_work_thread(void *arg)
   int current_job_id = 0;
   struct cryptonight_hash output_hash;
   // bytes 24..31 is what we are looking for
-  uint64_t target;
+  uint64_t target = 0;
   uint8_t input_hash[MONERO_INPUT_HASH_MAX_LEN];
   uint32_t nonce = 0, nonce_to = 0;
   size_t input_hash_len = 0;
@@ -183,8 +184,10 @@ void monero_solver_cpu_free(struct monero_solver *ptr)
   free(solver);
 }
 
-struct monero_solver *monero_solver_new_cpu()
+struct monero_solver *
+monero_solver_new_cpu(const struct monero_config_solver_cpu *cfg)
 {
+  log_debug("Starting CPU solver, affinity: %d", cfg->solver.affine_to_cpu);
   struct monero_solver_cpu *solver_cpu =
       calloc(1, sizeof(struct monero_solver_cpu));
   atomic_store(&solver_cpu->job_id, 0);
