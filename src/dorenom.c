@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <uv.h>
 
 #include "cli_opts.h"
@@ -50,6 +51,7 @@ void on_sigint_received(uv_signal_t *handle, int signum)
 
 int main(int argc, char **argv)
 {
+  srand(time(NULL));
   // parse options
   struct cli_opts cli_opts = {0};
   parse_cli_opts(argc, argv, &cli_opts);

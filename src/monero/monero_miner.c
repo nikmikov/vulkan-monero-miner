@@ -127,7 +127,7 @@ void monero_miner_new_job(miner_handle handle, void *job_data,
   miner->event_handler = event_handler;
   // submit to executors.
   // pick random starting point
-  uint32_t nonce_from = arc4random() % miner->nonce_chunk_size;
+  uint32_t nonce_from = ((uint64_t)rand()) % miner->nonce_chunk_size;
   log_debug("Work: %lu. Starting nonce: %x, chunk size: %u", miner->job_seq_id,
             nonce_from, miner->nonce_chunk_size);
   // split nonce into work chunks of equal size
