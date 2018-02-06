@@ -43,7 +43,8 @@ inline static uint64_t read_target(const char *str)
   return 0; // error
 }
 
-void monero_miner_submit(struct monero_solver_solution *solution, void *data)
+void monero_miner_submit(int solver_id, struct monero_solver_solution *solution,
+                         void *data)
 {
   struct monero_miner *miner = (struct monero_miner *)data;
   assert(miner->event_handler != NULL);
@@ -51,6 +52,9 @@ void monero_miner_submit(struct monero_solver_solution *solution, void *data)
     log_warn("Stale solution detected!");
     return;
   }
+  uint64_t *hash_val = (uint64_t *)&solution->hash[24];
+  log_info("#%d: Solution found: nonce: %x, solution: %lx, target: %lx",
+           solver_id, solution->nonce, *hash_val, miner->target);
   struct monero_result result = {0, .nonce = 0};
   result.job_id = miner->job_id;
   result.nonce = solution->nonce;
@@ -65,7 +69,7 @@ void monero_miner_submit(struct monero_solver_solution *solution, void *data)
 
 void monero_miner_free(miner_handle *handle)
 {
-  struct monero_miner *miner = (struct monero_miner *)handle;
+  struct monero_miner *miner = (struct monero_miner *)*handle;
   if (miner->job_id != NULL) {
     free((void *)miner->job_id);
   }
@@ -79,6 +83,7 @@ void monero_miner_free(miner_handle *handle)
     free(miner->solvers);
   }
   free((void *)miner);
+  *handle = NULL;
 }
 
 void monero_miner_new_job(miner_handle handle, void *job_data,
@@ -174,6 +179,7 @@ miner_handle monero_miner_new(const struct monero_config *cfg)
       log_error("Monero CUDA solver is not suported yet");
       goto ERROR;
     }
+    monero_miner->solvers[i]->solver_id = (int)i;
   }
 
   return miner;

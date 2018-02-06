@@ -55,13 +55,12 @@ void monero_solver_metrics_callback(uv_timer_t *handle)
   int hashes_processed = atomic_load(&solver->hashes_processed);
   int hashrate = hashes_processed - solver->hashes_prev;
   solver->hashes_prev = hashes_processed;
-  log_info("Hashrate: %dH/sec", hashrate / 5);
+  log_info("#%d: Hashrate: %dH/sec", solver->solver.solver_id, hashrate / 5);
 }
 
 /** Called from worker thread on main loop when solution found */
 void monero_solver_cpu_solution_found(uv_async_t *handle)
 {
-  log_debug("Processing solution");
   assert(handle->data);
   struct monero_solver_cpu *solver = (struct monero_solver_cpu *)handle->data;
   struct monero_solver_solution solutions[solver->num_solutions];
@@ -78,7 +77,8 @@ void monero_solver_cpu_solution_found(uv_async_t *handle)
   // submit solution
   assert(solver->submit != NULL);
   for (size_t i = 0; i < num_solutions; ++i) {
-    solver->submit(&solutions[i], solver->submit_data);
+    solver->submit(solver->solver.solver_id, &solutions[i],
+                   solver->submit_data);
   }
 }
 
@@ -122,8 +122,6 @@ void monero_solver_cpu_work_thread(void *arg)
       // check target
       if (*hash_val < target) {
         // solution found
-        log_info("Solution found: nonce: %x, solution: %lx, target: %lx", nonce,
-                 *hash_val, target);
         uv_mutex_lock(&solver->solution_lock);
         if (solver->num_solutions < SOLUTIONS_BUFFER_SIZE) {
           struct monero_solver_solution *sol =
