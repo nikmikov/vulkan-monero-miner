@@ -19,8 +19,8 @@
 #define CRYPTONIGHT_MASK 0x1FFFF0                          /** for monero */
 
 struct cryptonight_ctx {
-  /*alignas(CRYPTONIGHT_MEMORY)*/ uint8_t long_state[CRYPTONIGHT_MEMORY];
-  uint8_t hash_state[224]; // Need only 200, explicit align
+  alignas(CRYPTONIGHT_MEMORY) uint8_t long_state[CRYPTONIGHT_MEMORY];
+  alignas(16) uint8_t hash_state[200];
   uint8_t ctx_info[24];    // Use some of the extra memory for flags
 };
 

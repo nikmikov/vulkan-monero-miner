@@ -6,7 +6,7 @@ NODEPS:=clean distclean
 
 
 #default settings
-STD=-std=c11 -pedantic
+STD=-std=c11 -pedantic -D_GNU_SOURCE
 WARN=-Wall -W # -Werror
 OPT=$(OPTIMIZATION)
 DBG=$(DEBUG)
@@ -62,7 +62,7 @@ clean:
 
 
 release:
-	$(MAKE) DEBUG="-DNDEBUG" OPTIMIZATION="-O2"
+	$(MAKE) DEBUG="-DNDEBUG" OPTIMIZATION="-O3"
 
 debug:
 	$(MAKE) DEBUG="-g -ggdb" OPTIMIZATION="-O0"
