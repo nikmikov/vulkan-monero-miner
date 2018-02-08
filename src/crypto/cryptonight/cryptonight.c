@@ -312,9 +312,9 @@ struct cryptonight_ctx *cryptonight_ctx_new()
   if (ctx->is_hugepages_mem &&
       mlock(ctx->long_state, CRYPTONIGHT_MEMORY) != 0) {
     log_warn("mlock failed");
-    ctx->is_mlocked_mem = true;
-  } else {
     ctx->is_mlocked_mem = false;
+  } else {
+    ctx->is_mlocked_mem = true;
   }
 
   return ctx;
