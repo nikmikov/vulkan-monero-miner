@@ -63,14 +63,15 @@ void monero_miner_print_metrics(uv_timer_t *handle)
   struct monero_solver_metrics metrics;
   for (size_t i = 0; i < miner->solvers_len; ++i) {
     miner->solvers[i]->get_metrics(miner->solvers[i], &metrics);
-    uint64_t cur = (metrics.hashes_processed_total - miner->hashes_prev[i])/PRINT_METRICS_SEC;
+    uint64_t cur = (metrics.hashes_processed_total - miner->hashes_prev[i]) /
+                   PRINT_METRICS_SEC;
     miner->hashes_prev[i] = metrics.hashes_processed_total;
     uint64_t avg = metrics.hashes_processed_total / seconds_elapsed;
-    buf_ptr += sprintf(buf_ptr, "| %llu:%llu:%llu ", cur, avg, metrics.solutions_found);
+    buf_ptr += sprintf(buf_ptr, "| %llu:%llu:%llu ", cur, avg,
+                       metrics.solutions_found);
   }
   *buf_ptr = 0;
   log_info(buf);
-
 }
 
 void monero_miner_submit(int solver_id, struct monero_solution *solution,
@@ -84,7 +85,8 @@ void monero_miner_submit(int solver_id, struct monero_solution *solution,
   }
 
   log_info("#%d: Solution found: nonce: %x, solution: %lx, target: %lx",
-           solver_id, solution->nonce, monero_solution_hash_val(solution->hash), miner->target);
+           solver_id, solution->nonce, monero_solution_hash_val(solution->hash),
+           miner->target);
   struct monero_result result = {0, .nonce = 0};
   result.job_id = miner->job_id;
   result.nonce = solution->nonce;
@@ -211,10 +213,14 @@ miner_handle monero_miner_new(const struct monero_config *cfg)
       log_error("Monero CUDA solver is not suported yet");
       goto ERROR;
     }
+    if (monero_miner->solvers[i] == NULL) {
+      goto ERROR;
+    }
     monero_miner->solvers[i]->solver_id = (int)i;
   }
 
-  monero_miner->hashes_prev = calloc(sizeof(uint64_t), monero_miner->solvers_len);
+  monero_miner->hashes_prev =
+      calloc(sizeof(uint64_t), monero_miner->solvers_len);
   monero_miner->time_start = time(NULL);
   uv_timer_init(uv_default_loop(), &monero_miner->timer_req);
   monero_miner->timer_req.data = monero_miner;

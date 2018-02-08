@@ -48,18 +48,19 @@ struct monero_solver_cpu {
   atomic_int hashes_counter;
 };
 
-void monero_solver_cpu_get_metrics(struct monero_solver* solver,
-                                   struct monero_solver_metrics* metrics)
+void monero_solver_cpu_get_metrics(struct monero_solver *solver,
+                                   struct monero_solver_metrics *metrics)
 {
   assert(solver != NULL);
   assert(metrics != NULL);
-  struct monero_solver_cpu *s = (struct monero_solver_cpu*)solver;
+  struct monero_solver_cpu *s = (struct monero_solver_cpu *)solver;
 
   s->metrics.hashes_processed_total += atomic_exchange(&s->hashes_counter, 0);
   *metrics = s->metrics;
 }
 
-static inline void metrics_add_solution(struct monero_solver_metrics *m, uint64_t sol)
+static inline void metrics_add_solution(struct monero_solver_metrics *m,
+                                        uint64_t sol)
 {
   ++m->solutions_found;
   for (size_t i = 0; i < m->solutions_found && i < 10; ++i) {
@@ -92,7 +93,8 @@ void monero_solver_cpu_solution_found(uv_async_t *handle)
   for (size_t i = 0; i < num_solutions; ++i) {
     solver->submit(solver->solver.solver_id, &solutions[i],
                    solver->submit_data);
-    metrics_add_solution(&solver->metrics, monero_solution_hash_val(solutions[i].hash));
+    metrics_add_solution(&solver->metrics,
+                         monero_solution_hash_val(solutions[i].hash));
   }
 }
 
@@ -207,7 +209,7 @@ monero_solver_new_cpu(const struct monero_config_solver_cpu *cfg)
   atomic_store(&solver_cpu->is_alive, true);
   solver_cpu->solver.work = monero_solver_cpu_work;
   solver_cpu->solver.free = monero_solver_cpu_free;
-  solver_cpu->solver.get_metrics =monero_solver_cpu_get_metrics;
+  solver_cpu->solver.get_metrics = monero_solver_cpu_get_metrics;
 
   solver_cpu->cryptonight_ctx = cryptonight_ctx_new();
   uv_mutex_init(&solver_cpu->solution_lock);

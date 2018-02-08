@@ -5,6 +5,8 @@
 
 #include <assert.h>
 #include <stdalign.h>
+#include <stdbool.h>
+#include <stdlib.h>
 #include <x86intrin.h>
 
 #include "crypto/blake.h"
@@ -12,6 +14,8 @@
 #include "crypto/jh.h"
 #include "crypto/keccak-tiny.h"
 #include "crypto/skein.h"
+#include "logging.h"
+#include "utils/hugepages.h"
 
 #define CRYPTONIGHT_MEMORY 2097152                         /* 2 MiB */
 #define CRYPTONIGHT_MEMORY_M128I (CRYPTONIGHT_MEMORY >> 4) /* 2 MiB / 16 */
@@ -19,9 +23,11 @@
 #define CRYPTONIGHT_MASK 0x1FFFF0                          /** for monero */
 
 struct cryptonight_ctx {
-  alignas(CRYPTONIGHT_MEMORY) uint8_t long_state[CRYPTONIGHT_MEMORY];
+  uint8_t *long_state;
   alignas(16) uint8_t hash_state[200];
-  uint8_t ctx_info[24];    // Use some of the extra memory for flags
+  bool is_hugepages_mem;
+  bool is_mlocked_mem;
+  //  uint8_t ctx_info[24];    // Use some of the extra memory for flags
 };
 
 #define AES_GENKEY_SUB(rcon, xout0, xout2)                                     \
@@ -282,11 +288,48 @@ void cryptonight_aesni(const uint8_t *input, size_t input_size,
 
 struct cryptonight_ctx *cryptonight_ctx_new()
 {
-  return calloc(1, sizeof(struct cryptonight_ctx));
+  struct cryptonight_ctx *ctx = calloc(1, sizeof(struct cryptonight_ctx));
+  ctx->long_state = hugepages_alloc(CRYPTONIGHT_MEMORY);
+  if (ctx->long_state == NULL) {
+    // fallback to regular aligned alloc
+    log_warn("Huge pages support unavaliable. Performance may suffer");
+    int res =
+        posix_memalign((void *)&ctx->long_state, CRYPTONIGHT_MEMORY, 4096);
+    if (res != 0) {
+      log_error("Memory allocation for context failed");
+      free(ctx);
+      return NULL;
+    }
+  } else {
+    ctx->is_hugepages_mem = true;
+  }
+
+  if (madvise(ctx->long_state, CRYPTONIGHT_MEMORY,
+              MADV_RANDOM | MADV_WILLNEED) != 0) {
+    log_warn("madvise failed");
+  }
+
+  if (ctx->is_hugepages_mem &&
+      mlock(ctx->long_state, CRYPTONIGHT_MEMORY) != 0) {
+    log_warn("mlock failed");
+    ctx->is_mlocked_mem = true;
+  } else {
+    ctx->is_mlocked_mem = false;
+  }
+
+  return ctx;
 }
 
 void cryptonight_ctx_free(struct cryptonight_ctx **ptr)
 {
+  if ((*ptr)->is_mlocked_mem) {
+    munlock((*ptr)->long_state, CRYPTONIGHT_MEMORY);
+  }
+  if ((*ptr)->is_hugepages_mem) {
+    hugepages_free((*ptr)->long_state, CRYPTONIGHT_MEMORY);
+  } else {
+    free((*ptr)->long_state);
+  }
   free(*ptr);
   *ptr = NULL;
 }
