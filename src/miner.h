@@ -30,6 +30,7 @@ struct miner {
   void (*new_job)(miner_handle, void *job_data,
                   struct miner_event_handler *event_handler);
   void (*free)(miner_handle *);
+  void (*benchmark)(miner_handle);
 };
 
 miner_handle miner_new(const struct config *cfg);

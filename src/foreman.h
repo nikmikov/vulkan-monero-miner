@@ -1,12 +1,13 @@
 #pragma once
 
 #include "config.h"
+#include <stdbool.h>
 
 struct foreman;
 
 typedef struct foreman *foreman_handle;
 
-foreman_handle foreman_init(const struct config *cfg);
+foreman_handle foreman_new(const struct config *cfg, bool benchmark_mode);
 
 /** free resource and reset handle to NULL*/
 void foreman_free(foreman_handle *foreman);

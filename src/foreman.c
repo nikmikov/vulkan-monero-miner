@@ -16,12 +16,14 @@ struct foreman {
   struct stratum_event_handler stratum_event_handler;
   miner_handle miner;
   struct miner_event_handler miner_event_handler;
+  bool is_benchmark;
 };
 
-void on_miner_event(const struct miner_event *event, void *data)
+void on_foreman_miner_event(const struct miner_event *event, void *data)
 {
   struct foreman *foreman = data;
   assert(foreman != NULL);
+  assert(!foreman->is_benchmark);
   assert(event != NULL);
   switch (event->event_type) {
   case MINER_EVENT_RESULT_FOUND:
@@ -38,7 +40,7 @@ void on_miner_event(const struct miner_event *event, void *data)
   }
 }
 
-void on_stratum_event(const struct stratum_event *event, void *data)
+void on_foreman_stratum_event(const struct stratum_event *event, void *data)
 {
   struct foreman *foreman = data;
   assert(foreman != NULL);
@@ -72,8 +74,8 @@ void on_stratum_event(const struct stratum_event *event, void *data)
   }
 }
 
-void on_connection_event(enum connection_event_type event,
-                         const uv_buf_t *event_data, void *data)
+void on_foreman_connection_event(enum connection_event_type event,
+                                 const uv_buf_t *event_data, void *data)
 {
   struct foreman *foreman = data;
   switch (event) {
@@ -98,42 +100,55 @@ void on_connection_event(enum connection_event_type event,
   }
 }
 
-foreman_handle foreman_init(const struct config *cfg)
+foreman_handle foreman_new(const struct config *cfg, bool is_benchmark)
 {
-  log_debug("Initializing foreman: %s", cfg->name);
-  connection_handle pool_connection = connection_init(&cfg->pool_list);
-  if (pool_connection == NULL) {
-    log_error("Failed initialize connection");
-    return NULL;
+  if (is_benchmark) {
+    log_info("Benchmark mode: ON");
+  } else {
+    log_debug("Initializing foreman: %s", cfg->name);
   }
-
-  stratum_handle stratum = stratum_new(cfg);
-  if (stratum == NULL) {
-    log_error("Failed initialize stratum");
-    connection_free(&pool_connection);
-    return NULL;
+  connection_handle pool_connection = NULL;
+  stratum_handle stratum = NULL;
+  if (!is_benchmark) {
+    pool_connection = connection_init(&cfg->pool_list);
+    if (pool_connection == NULL) {
+      log_error("Failed initialize connection");
+      return NULL;
+    }
+    stratum = stratum_new(cfg);
+    if (stratum == NULL) {
+      log_error("Failed initialize stratum");
+      connection_free(&pool_connection);
+      return NULL;
+    }
   }
 
   miner_handle miner = miner_new(cfg);
   if (miner == NULL) {
     log_error("Failed initialize miner");
-    connection_free(&pool_connection);
-    stratum_free(&stratum);
+    if (!is_benchmark) {
+      connection_free(&pool_connection);
+      stratum_free(&stratum);
+    }
     return NULL;
   }
 
   struct foreman *foreman = calloc(1, sizeof(struct foreman));
+  foreman->is_benchmark = is_benchmark;
   foreman->cfg = cfg;
-  foreman->connection = pool_connection;
-  foreman->connection_event_handler.data = foreman;
-  foreman->connection_event_handler.cb = on_connection_event;
 
-  foreman->stratum_event_handler.data = foreman;
-  foreman->stratum_event_handler.cb = on_stratum_event;
-  foreman->stratum = stratum;
+  if (!is_benchmark) {
+    foreman->connection = pool_connection;
+    foreman->connection_event_handler.data = foreman;
+    foreman->connection_event_handler.cb = on_foreman_connection_event;
+
+    foreman->stratum_event_handler.data = foreman;
+    foreman->stratum_event_handler.cb = on_foreman_stratum_event;
+    foreman->stratum = stratum;
+  }
 
   foreman->miner_event_handler.data = foreman;
-  foreman->miner_event_handler.cb = on_miner_event;
+  foreman->miner_event_handler.cb = on_foreman_miner_event;
   foreman->miner = miner;
 
   return foreman;
@@ -143,24 +158,35 @@ void foreman_start(foreman_handle foreman)
 {
   log_debug("Starting foreman: %s", foreman->cfg->name);
   assert(foreman != NULL);
-  assert(foreman->connection != NULL);
-  connection_start(foreman->connection, &foreman->connection_event_handler);
+  if (!foreman->is_benchmark) {
+    assert(foreman->connection != NULL);
+    connection_start(foreman->connection, &foreman->connection_event_handler);
+  } else {
+    assert(foreman->miner->benchmark);
+    foreman->miner->benchmark(foreman->miner);
+  }
 }
 
 void foreman_stop(foreman_handle foreman)
 {
   log_debug("Stopping foreman: %s", foreman->cfg->name);
   assert(foreman != NULL);
-  assert(foreman->connection != NULL);
-  connection_stop(foreman->connection);
+  if (!foreman->is_benchmark) {
+    assert(foreman->connection != NULL);
+    connection_stop(foreman->connection);
+  }
 }
 
 void foreman_free(foreman_handle *foreman_ptr)
 {
   assert(*foreman_ptr != NULL);
   struct foreman *foreman = *foreman_ptr;
-  connection_free(&foreman->connection);
-  stratum_free(&foreman->stratum);
+  if (foreman->connection != NULL) {
+    connection_free(&foreman->connection);
+  }
+  if (foreman->stratum != NULL) {
+    stratum_free(&foreman->stratum);
+  }
   assert(foreman->miner->free != NULL);
   foreman->miner->free(&foreman->miner);
   free(foreman);

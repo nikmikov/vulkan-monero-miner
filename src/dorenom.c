@@ -75,7 +75,7 @@ int main(int argc, char **argv)
 
   struct config *p = cfg;
   for (size_t i = 0; i < cfg_size; ++i, p = p->next) {
-    foremans[i] = foreman_init(p);
+    foremans[i] = foreman_new(p, cli_opts.is_benchmark);
     if (foremans[i] == NULL) {
       exit_code = 1;
       goto SHUTDOWN;

@@ -16,9 +16,10 @@ void parse_cli_opts(int argc, char **argv, struct cli_opts *opts)
   assert(opts->config_file == NULL);
   static struct option long_opts[] = {{"help", no_argument, NULL, 'h'},
                                       {"config", required_argument, NULL, 'c'},
+                                      {"bench", no_argument, NULL, 'b'},
                                       {NULL, 0, NULL, 0}};
 
-  const char *short_opts = "hc:";
+  const char *short_opts = "hcb:";
 
   int c;
   while ((c = getopt_long(argc, argv, short_opts, long_opts, NULL)) != -1) {
@@ -28,6 +29,9 @@ void parse_cli_opts(int argc, char **argv, struct cli_opts *opts)
       break;
     case 'c':
       opts->config_file = optarg;
+      break;
+    case 'b':
+      opts->is_benchmark = true;
       break;
     case 'h':
       print_usage(argv[0]);

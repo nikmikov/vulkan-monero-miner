@@ -78,7 +78,6 @@ void monero_miner_submit(int solver_id, struct monero_solution *solution,
                          void *data)
 {
   struct monero_miner *miner = (struct monero_miner *)data;
-  assert(miner->event_handler != NULL);
   if (solution->job_id != miner->job_seq_id) {
     log_warn("Stale solution detected!");
     return;
@@ -95,8 +94,12 @@ void monero_miner_submit(int solver_id, struct monero_solution *solution,
   struct miner_event_result_found result_found_evt;
   result_found_evt.event_type = MINER_EVENT_RESULT_FOUND;
   result_found_evt.data = &result;
-  miner->event_handler->cb((struct miner_event *)&result_found_evt,
-                           miner->event_handler->data);
+  if (miner->event_handler != NULL) {
+    miner->event_handler->cb((struct miner_event *)&result_found_evt,
+                             miner->event_handler->data);
+  } else {
+    log_warn("Solution NOT submitted. Probably running in benchmark mode");
+  }
 }
 
 void monero_miner_free(miner_handle *handle)
@@ -181,6 +184,14 @@ FREE:
   free(input_hash);
 }
 
+void monero_miner_benchmark(miner_handle h)
+{
+  assert(h != NULL);
+  struct monero_job *job_data = monero_job_gen_random();
+  h->new_job(h, job_data, NULL);
+  monero_job_free(job_data);
+}
+
 miner_handle monero_miner_new(const struct monero_config *cfg)
 {
   assert(cfg != NULL);
@@ -189,6 +200,7 @@ miner_handle monero_miner_new(const struct monero_config *cfg)
 
   miner->new_job = monero_miner_new_job;
   miner->free = monero_miner_free;
+  miner->benchmark = monero_miner_benchmark;
 
   size_t solvers_len = 0;
   struct monero_config_solver *p = cfg->solvers_list;
