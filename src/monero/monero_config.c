@@ -57,6 +57,34 @@ monero_config_solver_cpu_from_json(const cJSON *json)
   return &res->solver;
 }
 
+struct monero_config_solver *
+monero_config_solver_cl_from_json(const cJSON *json)
+{
+  assert(json != NULL);
+  if (!cJSON_IsObject(json)) {
+    log_error("CL solver config is not a JSON object, %s", cJSON_Print(json));
+    return NULL;
+  }
+  // read affinity
+  const cJSON *json_affinity;
+  if (!json_get_object(json, "affine_to_cpu", &json_affinity)) {
+    return NULL;
+  }
+  int affinity = -1;
+  if (cJSON_IsNumber(json_affinity)) {
+    affinity = json_affinity->valueint;
+  } else if (!cJSON_IsFalse(json_affinity)) {
+    log_error("CPU affinity must be a number or `false`");
+    return NULL;
+  }
+
+  struct monero_config_solver_cl *res =
+      calloc(1, sizeof(struct monero_config_solver_cl));
+  res->solver.solver_type = MONERO_CONFIG_SOLVER_CL;
+  res->solver.affine_to_cpu = affinity;
+  return &res->solver;
+}
+
 struct monero_config_solver *monero_config_solver_from_json(const cJSON *json)
 {
   assert(json != NULL);
@@ -74,6 +102,8 @@ struct monero_config_solver *monero_config_solver_from_json(const cJSON *json)
   const char *type_str = json_solver->string;
   if (strcmp(type_str, "cpu") == 0) {
     return monero_config_solver_cpu_from_json(json_solver);
+  } else if (strcmp(type_str, "cl") == 0) {
+    return monero_config_solver_cl_from_json(json_solver);
   } else {
     log_error("Unknown solver type: %s", type_str);
   }

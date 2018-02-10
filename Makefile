@@ -9,6 +9,6 @@ install:
 	cd src && $(MAKE) $@
 
 clang-format:
-	find src/ -iname *.h -o -iname *.c | xargs clang-format -i
+	find src/ -iname *.h -o -iname *.c -o -iname *.cl | xargs clang-format -i
 
 .PHONY: install

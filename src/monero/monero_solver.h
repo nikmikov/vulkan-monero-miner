@@ -40,3 +40,7 @@ struct monero_solver {
 /** new monero cpu kernel */
 struct monero_solver *
 monero_solver_new_cpu(const struct monero_config_solver_cpu *cfg);
+
+/** new monero opencl kernel */
+struct monero_solver *
+monero_solver_new_cl(const struct monero_config_solver_cl *cfg);

@@ -255,9 +255,6 @@ void cryptonight_aesni(const uint8_t *input, size_t input_size,
     idx0 = _mm_cvtsi128_si64(cx);
     bx0 = cx;
 
-    // if(PREFETCH)
-    //  _mm_prefetch((const char*)&l0[idx0 & MASK], _MM_HINT_T0);
-
     uint64_t hi, lo, cl, ch;
     cl = ((uint64_t *)&l0[idx0 & CRYPTONIGHT_MASK])[0];
     ch = ((uint64_t *)&l0[idx0 & CRYPTONIGHT_MASK])[1];
@@ -271,9 +268,6 @@ void cryptonight_aesni(const uint8_t *input, size_t input_size,
     ah0 ^= ch;
     al0 ^= cl;
     idx0 = al0;
-
-    // if(PREFETCH)
-    //  _mm_prefetch((const char*)&l0[idx0 & MASK], _MM_HINT_T0);
   }
   cn_implode_scratchpad((__m128i *)ctx0->long_state,
                         (__m128i *)ctx0->hash_state);

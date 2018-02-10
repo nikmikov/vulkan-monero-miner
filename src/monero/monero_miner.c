@@ -219,8 +219,9 @@ miner_handle monero_miner_new(const struct monero_config *cfg)
           monero_solver_new_cpu((const struct monero_config_solver_cpu *)p);
       break;
     case MONERO_CONFIG_SOLVER_CL:
-      log_error("Monero CL solver is not suported yet");
-      goto ERROR;
+      monero_miner->solvers[i] =
+          monero_solver_new_cl((const struct monero_config_solver_cl *)p);
+      break;
     case MONERO_CONFIG_SOLVER_CUDA:
       log_error("Monero CUDA solver is not suported yet");
       goto ERROR;
