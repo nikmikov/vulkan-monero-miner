@@ -32,6 +32,22 @@ static inline bool json_get_bool(const cJSON *json, const char *field,
   return true;
 }
 
+/** Read boolean field from json, return false if field does not exists */
+static inline int json_get_int(const cJSON *json, const char *field, int *out)
+{
+  const cJSON *item = NULL;
+  if (!json_get_object(json, field, &item)) {
+    return false;
+  }
+  if (!cJSON_IsNumber(item)) {
+    log_error("Field \"%s\" is not a number", field);
+    return false;
+  }
+
+  *out = item->valueint;
+  return true;
+}
+
 /** Get a string field from json, return NULL if the field does not exists */
 static inline const char *json_get_string(const cJSON *json, const char *field)
 {

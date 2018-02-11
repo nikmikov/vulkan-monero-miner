@@ -53,7 +53,7 @@ int main(int argc, char **argv)
 {
   srand(time(NULL));
   // parse options
-  struct cli_opts cli_opts = {0};
+  struct cli_opts cli_opts;
   parse_cli_opts(argc, argv, &cli_opts);
 
   // TODO: init console
