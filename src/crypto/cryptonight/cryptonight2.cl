@@ -1,4 +1,5 @@
 /** tunable parameters, can be overriden via -D flag to compiler */
+R"===(
 #ifndef CRYPTONIGHT_MEMORY
 #define CRYPTONIGHT_MEMORY 2097152 /* 2 MiB */
 #endif
@@ -195,11 +196,14 @@ uint4 aes_keygenassist(uint4 key, uint rcon)
   return res;
 }
 
-// This will shift and xor tmp1 into itself as 4 32-bit vals such as
+// This will shift and xor var into itself as 4 32-bit vals such as
 // sl_xor(a1 a2 a3 a4) = a1 (a2^a1) (a3^a2^a1) (a4^a3^a2^a1)
 static inline uint4 sl_xor(uint4 a)
 {
-  return a ^ (a << 4) ^ (a << 8) ^ (a << 12);
+  a.s1 ^= a.s0;
+  a.s2 ^= a.s3;
+  a.s3 ^= a.s2;
+  return a;
 }
 
 uint8 aes_genkey8(const uint8 k0, const uint rcon)
@@ -446,3 +450,4 @@ kernel void cryptonight(global ulong *input, const uint start_nonce,
     output[i] = hash_state[i];
   }
 }
+)==="

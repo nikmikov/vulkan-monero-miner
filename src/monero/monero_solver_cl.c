@@ -11,6 +11,8 @@
 #include <CL/cl.h>
 #endif
 
+#include "resources.h"
+
 struct monero_solver_cl_context {
   cl_context cl_ctx;
   cl_device_id device_id;
@@ -246,6 +248,6 @@ bool monero_solver_cl_context_query_device(struct monero_solver_cl_context *gpu)
 bool monero_solver_cl_context_prepare_kernel(
     struct monero_solver_cl_context *gpu)
 {
-
+  printf("%s\n", RC_CL_SOURCE_CRYPTONIGHT);
   return false;
 }

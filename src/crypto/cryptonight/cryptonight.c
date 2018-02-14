@@ -1,6 +1,3 @@
-/* Credits to xmrstack team
- *
- */
 #include "crypto/cryptonight/cryptonight.h"
 
 #include <assert.h>
@@ -174,16 +171,11 @@ void cn_implode_scratchpad(const __m128i *input, __m128i *output)
   xout7 = _mm_load_si128(output + 11);
 
   for (size_t i = 0; i < CRYPTONIGHT_MEMORY_M128I; i += 8) {
-    //  if(PREFETCH)
-    //  _mm_prefetch((const char*)input + i + 0, _MM_HINT_NTA);
 
     xout0 = _mm_xor_si128(_mm_load_si128(input + i + 0), xout0);
     xout1 = _mm_xor_si128(_mm_load_si128(input + i + 1), xout1);
     xout2 = _mm_xor_si128(_mm_load_si128(input + i + 2), xout2);
     xout3 = _mm_xor_si128(_mm_load_si128(input + i + 3), xout3);
-
-    //  if(PREFETCH)
-    //  _mm_prefetch((const char*)input + i + 4, _MM_HINT_NTA);
 
     xout4 = _mm_xor_si128(_mm_load_si128(input + i + 4), xout4);
     xout5 = _mm_xor_si128(_mm_load_si128(input + i + 5), xout5);

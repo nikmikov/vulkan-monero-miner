@@ -9,7 +9,8 @@
 
 struct monero_job *monero_job_gen_random()
 {
-  static const size_t blob_int_blocks = 1 + MONERO_INPUT_HASH_MAX_LEN / sizeof(int);
+  static const size_t blob_int_blocks =
+      1 + MONERO_INPUT_HASH_MAX_LEN / sizeof(int);
 
   int *blob = calloc(blob_int_blocks, sizeof(int));
   int *p = blob;
