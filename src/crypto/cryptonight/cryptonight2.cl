@@ -18,7 +18,8 @@ R"===(
 #define HASH_STATE_SIZE 200
 #define INPUT_HASH_SIZE 88
 
-#define CRYPTONIGHT_MEMORY_UINT (CRYPTONIGHT_MEMORY >> 2) /* 2 MiB / 4 */
+#define CRYPTONIGHT_MEMORY_UINT (CRYPTONIGHT_MEMORY / 4) /* 2 MiB / 4 */
+#define CRYPTONIGHT_MEMORY_UINT8 (CRYPTONIGHT_MEMORY_UINT / 8)
 
 // Keccak constants
 static const constant uint keccakf_rotc[24] = {1,  3,  6,  10, 15, 21, 28, 36,
@@ -101,7 +102,7 @@ static const constant uint aes_table[4][256] = {
 
 static const constant uint aes_sbox[256] = aes_data(aes_h0);
 
-void keccakf1600(ulong *st)
+static inline void keccakf1600(ulong *st)
 {
   int i, round;
   ulong t, bc[5];
@@ -188,7 +189,7 @@ static inline uint sub_word(uint4 key)
 
 #define ROTR8(x) (x >> 8) | (x << (32 - 8))
 
-uint4 aes_keygenassist(uint4 key, uint rcon)
+static inline uint4 aes_keygenassist(uint4 key, uint rcon)
 {
   uint X1 = sub_word(BYTE1(key));
   uint X3 = sub_word(BYTE3(key));
@@ -206,7 +207,7 @@ static inline uint4 sl_xor(uint4 a)
   return a;
 }
 
-uint8 aes_genkey8(const uint8 k0, const uint rcon)
+static inline uint8 aes_genkey8(const uint8 k0, const uint rcon)
 {
   union {
     struct {
@@ -222,7 +223,7 @@ uint8 aes_genkey8(const uint8 k0, const uint rcon)
 }
 
 // clang-format off
-uint8 aes_round8(const uint8 a, const uint8 key)
+static inline uint8 aes_round8(const uint8 a, const uint8 key)
 {
   uint8 i0 = BYTE0(a);
   uint8 i1 = BYTE1(a);
@@ -230,14 +231,14 @@ uint8 aes_round8(const uint8 a, const uint8 key)
   uint8 i3 = BYTE3(a);
 
   uint8 x = {
-    aes_table[0][i0.s3] ^ aes_table[1][i1.s0] ^ aes_table[2][i2.s1] ^ aes_table[3][i2.s2],
-    aes_table[0][i0.s2] ^ aes_table[1][i2.s3] ^ aes_table[2][i2.s0] ^ aes_table[3][i2.s1],
-    aes_table[0][i0.s1] ^ aes_table[1][i1.s2] ^ aes_table[2][i2.s3] ^ aes_table[3][i2.s0],
-    aes_table[0][i0.s0] ^ aes_table[1][i1.s1] ^ aes_table[2][i2.s2] ^ aes_table[3][i2.s3],
-    aes_table[0][i0.s7] ^ aes_table[1][i1.s4] ^ aes_table[2][i2.s5] ^ aes_table[3][i2.s6],
-    aes_table[0][i0.s6] ^ aes_table[1][i2.s7] ^ aes_table[2][i2.s4] ^ aes_table[3][i2.s5],
-    aes_table[0][i0.s5] ^ aes_table[1][i1.s6] ^ aes_table[2][i2.s7] ^ aes_table[3][i2.s4],
-    aes_table[0][i0.s4] ^ aes_table[1][i1.s5] ^ aes_table[2][i2.s6] ^ aes_table[3][i2.s7]
+    aes_table[0][i0.s3] ^ aes_table[1][i1.s0] ^ aes_table[2][i2.s1] ^ aes_table[3][i3.s2],
+    aes_table[0][i0.s2] ^ aes_table[1][i2.s3] ^ aes_table[2][i2.s0] ^ aes_table[3][i3.s1],
+    aes_table[0][i0.s1] ^ aes_table[1][i1.s2] ^ aes_table[2][i2.s3] ^ aes_table[3][i3.s0],
+    aes_table[0][i0.s0] ^ aes_table[1][i1.s1] ^ aes_table[2][i2.s2] ^ aes_table[3][i3.s3],
+    aes_table[0][i0.s7] ^ aes_table[1][i1.s4] ^ aes_table[2][i2.s5] ^ aes_table[3][i3.s6],
+    aes_table[0][i0.s6] ^ aes_table[1][i2.s7] ^ aes_table[2][i2.s4] ^ aes_table[3][i3.s5],
+    aes_table[0][i0.s5] ^ aes_table[1][i1.s6] ^ aes_table[2][i2.s7] ^ aes_table[3][i3.s4],
+    aes_table[0][i0.s4] ^ aes_table[1][i1.s5] ^ aes_table[2][i2.s6] ^ aes_table[3][i3.s7]
   };
 
   return x ^ key;
@@ -249,7 +250,7 @@ uint8 aes_round8(const uint8 a, const uint8 key)
   x2 = aes_round8(k, x2); \
   x3 = aes_round8(k, x3);
 
-uint4 aes_round4(const uint4 a, const uint4 key)
+static inline uint4 aes_round4(const uint4 a, const uint4 key)
 {
   uint4 i0 = BYTE0(a);
   uint4 i1 = BYTE1(a);
@@ -257,17 +258,17 @@ uint4 aes_round4(const uint4 a, const uint4 key)
   uint4 i3 = BYTE3(a);
 
   uint4 x = {
-    aes_table[0][i0.s3] ^ aes_table[1][i1.s0] ^ aes_table[2][i2.s1] ^ aes_table[3][i2.s2],
-    aes_table[0][i0.s2] ^ aes_table[1][i2.s3] ^ aes_table[2][i2.s0] ^ aes_table[3][i2.s1],
-    aes_table[0][i0.s1] ^ aes_table[1][i1.s2] ^ aes_table[2][i2.s3] ^ aes_table[3][i2.s0],
-    aes_table[0][i0.s0] ^ aes_table[1][i1.s1] ^ aes_table[2][i2.s2] ^ aes_table[3][i2.s3]
+    aes_table[0][i0.s3] ^ aes_table[1][i1.s0] ^ aes_table[2][i2.s1] ^ aes_table[3][i3.s2],
+    aes_table[0][i0.s2] ^ aes_table[1][i2.s3] ^ aes_table[2][i2.s0] ^ aes_table[3][i3.s1],
+    aes_table[0][i0.s1] ^ aes_table[1][i1.s2] ^ aes_table[2][i2.s3] ^ aes_table[3][i3.s0],
+    aes_table[0][i0.s0] ^ aes_table[1][i1.s1] ^ aes_table[2][i2.s2] ^ aes_table[3][i3.s3]
   };
 
   return x ^ key;
 }
 // clang-format on
 
-void explode_scratchpad(uint *state, uint *scratchpad)
+static inline void explode_scratchpad(uint *state, global uint *scratchpad)
 {
   uint8 xin0, xin1, xin2, xin3;
   uint8 k0, k1, k2, k3, k4;
@@ -283,33 +284,33 @@ void explode_scratchpad(uint *state, uint *scratchpad)
   // The bytes 64..191
   // are extracted from the Keccak final state and split into 8 blocks of
   // 16 bytes each.
-  xin0 = vload8(2 * 8, state);
-  xin1 = vload8(3 * 8, state);
-  xin2 = vload8(4 * 8, state);
-  xin3 = vload8(5 * 8, state);
+  xin0 = vload8(2, state);
+  xin1 = vload8(3, state);
+  xin2 = vload8(4, state);
+  xin3 = vload8(5, state);
 
   // Each block is encrypted using the following procedure
   // `block = aes_round(block, round_keys[i])`
-  for (size_t i = 0; i < CRYPTONIGHT_MEMORY_UINT; i += 8 * 4) {
+  for (size_t i = 0; i < CRYPTONIGHT_MEMORY_UINT8; i += 4) {
     AES_ROUND8_4(k0, xin0, xin1, xin2, xin3);
     AES_ROUND8_4(k1, xin0, xin1, xin2, xin3);
     AES_ROUND8_4(k2, xin0, xin1, xin2, xin3);
     AES_ROUND8_4(k3, xin0, xin1, xin2, xin3);
     AES_ROUND8_4(k4, xin0, xin1, xin2, xin3);
 
-    vstore8(xin0, i + 8 * 0, scratchpad);
-    vstore8(xin1, i + 8 * 1, scratchpad);
-    vstore8(xin2, i + 8 * 2, scratchpad);
-    vstore8(xin3, i + 8 * 3, scratchpad);
+    vstore8(xin0, i + 0, scratchpad);
+    vstore8(xin1, i + 1, scratchpad);
+    vstore8(xin2, i + 2, scratchpad);
+    vstore8(xin3, i + 3, scratchpad);
   }
 }
 
 static inline size_t to_scratchpad_address(ulong v)
 {
-  return (v & CRYPTONIGHT_MASK) >> 2;
+  return (v & CRYPTONIGHT_MASK) >> 4;
 }
 
-void memory_hard_loop(ulong4 k, uint *scratchpad)
+static inline void memory_hard_loop(ulong4 k, global uint *scratchpad)
 {
   union {
     ulong4 v;
@@ -327,9 +328,9 @@ void memory_hard_loop(ulong4 k, uint *scratchpad)
 
     // scratchpad[addr] = aes_round(scratchpad[addr], a)
     uint4 cx = aes_round4(vload4(idx_a, scratchpad), X.a);
-
     // b, scratchpad[addr] = scratchpad[addr], b ^ scratchpad[addr]
     vstore4(cx ^ X.b, idx_a, scratchpad);
+
     X.b = cx;
 
     // addr = to_scratchpad_address(b)
@@ -347,34 +348,34 @@ void memory_hard_loop(ulong4 k, uint *scratchpad)
   }
 }
 
-void implode_scratchpad(uint *state, uint *scratchpad)
+static inline void implode_scratchpad(uint *state, global uint *scratchpad)
 {
   uint8 xin0, xin1, xin2, xin3;
   uint8 k0, k1, k2, k3, k4;
   // bytes 32..63 of the Keccak final state are
   // interpreted as an AES-256 key and expanded to 10 round keys.
-  k0 = vload8(8, state);
+  k0 = vload8(1, state);
   k1 = aes_genkey8(k0, 0x01);
   k2 = aes_genkey8(k1, 0x02);
   k3 = aes_genkey8(k2, 0x04);
   k4 = aes_genkey8(k3, 0x08);
 
   // Bytes 64..191 are extracted from the Keccak state
-  xin0 = vload8(2 * 8, state) ^ vload8(0 * 8, scratchpad);
-  xin1 = vload8(3 * 8, state) ^ vload8(1 * 8, scratchpad);
-  xin2 = vload8(4 * 8, state) ^ vload8(2 * 8, scratchpad);
-  xin3 = vload8(5 * 8, state) ^ vload8(3 * 8, scratchpad);
+  xin0 = vload8(2, state) ^ vload8(0, scratchpad);
+  xin1 = vload8(3, state) ^ vload8(1, scratchpad);
+  xin2 = vload8(4, state) ^ vload8(2, scratchpad);
+  xin3 = vload8(5, state) ^ vload8(3, scratchpad);
 
   // Then the result is encrypted in
   // the same manner as in the `explode_scratchpad`,
   // but using the new keys. The
   // result is XORed with the first 128 bytes from the scratchpad,
   // encrypted again, and so on.
-  for (size_t i = 0; i < CRYPTONIGHT_MEMORY_UINT; i += 8 * 4) {
-    xin0 ^= vload8(i + 8 * 0, scratchpad);
-    xin1 ^= vload8(i + 8 * 1, scratchpad);
-    xin2 ^= vload8(i + 8 * 2, scratchpad);
-    xin3 ^= vload8(i + 8 * 3, scratchpad);
+  for (size_t i = 0; i < CRYPTONIGHT_MEMORY_UINT8; i += 4) {
+    xin0 ^= vload8(i + 0, scratchpad);
+    xin1 ^= vload8(i + 1, scratchpad);
+    xin2 ^= vload8(i + 2, scratchpad);
+    xin3 ^= vload8(i + 3, scratchpad);
 
     AES_ROUND8_4(k0, xin0, xin1, xin2, xin3);
     AES_ROUND8_4(k1, xin0, xin1, xin2, xin3);
@@ -385,10 +386,10 @@ void implode_scratchpad(uint *state, uint *scratchpad)
 
   // then the bytes 64..191 in the Keccak state
   // are replaced with the result
-  vstore8(xin0, 2 * 8, state);
-  vstore8(xin1, 3 * 8, state);
-  vstore8(xin2, 4 * 8, state);
-  vstore8(xin3, 5 * 8, state);
+  vstore8(xin0, 2, state);
+  vstore8(xin1, 3, state);
+  vstore8(xin2, 4, state);
+  vstore8(xin3, 5, state);
 }
 
 static const constant size_t INPUT_SIZE_ULONG =
@@ -396,8 +397,9 @@ static const constant size_t INPUT_SIZE_ULONG =
 static const constant size_t HASH_STATE_SIZE_ULONG =
     HASH_STATE_SIZE / sizeof(ulong);
 
-void hash_state_init_with_nonce(global ulong *input, const uint nonce,
-                                ulong *hash_state)
+static inline void hash_state_init_with_nonce(global ulong *input,
+                                              const uint nonce,
+                                              ulong *hash_state)
 {
   for (size_t i = 0; i < INPUT_SIZE_ULONG; ++i) {
     hash_state[i] = input[i];
@@ -414,13 +416,16 @@ void hash_state_init_with_nonce(global ulong *input, const uint nonce,
 }
 
 // input always 11x8 byte elements (88 bytes)
-kernel void cryptonight(global ulong *input, const uint start_nonce,
+kernel void cryptonight(global ulong *input, global uint *scratchpad_begin,
                         global ulong *output)
 {
-  uint scratchpad[CRYPTONIGHT_MEMORY_UINT];
+  const size_t work_id = get_global_id(0) - get_global_offset(0);
+  global uint *scratchpad =
+      scratchpad_begin + work_id * CRYPTONIGHT_MEMORY_UINT;
   ulong hash_state[HASH_STATE_SIZE_ULONG];
 
-  uint nonce = start_nonce + get_global_id(0);
+  uint nonce = get_global_id(0);
+
   // copy hash and insert work nonce
   hash_state_init_with_nonce(input, nonce, hash_state);
 
@@ -433,7 +438,7 @@ kernel void cryptonight(global ulong *input, const uint start_nonce,
   // Bytes 0..31 and 32..63 of the Keccak state
   // are XORed, and the resulting 32 bytes are used to initialize
   // variables a and b, 16 bytes each.
-  ulong4 x0 = vload4(0, hash_state) ^ vload4(4, hash_state);
+  ulong4 x0 = vload4(0, hash_state) ^ vload4(1, hash_state);
 
   // run main cryptonight loop
   memory_hard_loop(x0, scratchpad);
@@ -445,7 +450,7 @@ kernel void cryptonight(global ulong *input, const uint start_nonce,
   keccakf1600(hash_state);
 
   // copy to output
-  const size_t offs = get_global_id(0) * HASH_STATE_SIZE_ULONG;
+  const size_t offs = work_id * HASH_STATE_SIZE_ULONG;
   for (size_t i = offs; i < offs + HASH_STATE_SIZE_ULONG; ++i) {
     output[i] = hash_state[i];
   }
