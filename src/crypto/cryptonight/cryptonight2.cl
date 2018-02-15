@@ -392,10 +392,8 @@ static inline void implode_scratchpad(uint *state, global uint *scratchpad)
   vstore8(xin3, 5, state);
 }
 
-static const constant size_t INPUT_SIZE_ULONG =
-    INPUT_HASH_SIZE / sizeof(ulong); // 11x8 == 88 bytes
-static const constant size_t HASH_STATE_SIZE_ULONG =
-    HASH_STATE_SIZE / sizeof(ulong);
+#define INPUT_SIZE_ULONG (INPUT_HASH_SIZE / sizeof(ulong)) /* 11x8 == 88 bytes */
+#define HASH_STATE_SIZE_ULONG (HASH_STATE_SIZE / sizeof(ulong))
 
 static inline void hash_state_init_with_nonce(global ulong *input,
                                               const uint nonce,

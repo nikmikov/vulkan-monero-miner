@@ -32,6 +32,7 @@ struct monero_solver_cl_context {
   size_t device_work_group_size;
   cl_uint device_compute_units;
   cl_ulong device_total_memsize;
+  cl_ulong device_max_memalloc_size;
   cl_ulong device_local_memsize;
 };
 
@@ -80,10 +81,11 @@ struct monero_solver_cl {
   atomic_int hashes_counter;
 };
 
-const size_t NTHREADS = 32;
-const size_t INPUT_BUFFER_SIZE = 88;
-const size_t OUTPUT_BUFFER_SIZE = NTHREADS * 1600;
-const size_t SCRATCHPAD_BUFFER_SIZE = NTHREADS * CRYPTONIGHT_MEMORY;
+#define NTHREADS 64
+#define LTHREADS 16
+#define INPUT_BUFFER_SIZE 88
+#define OUTPUT_BUFFER_SIZE (NTHREADS * 1600)
+#define SCRATCHPAD_BUFFER_SIZE ((size_t)NTHREADS * CRYPTONIGHT_MEMORY)
 
 void monero_solver_cl_get_metrics(struct monero_solver *solver,
                                   struct monero_solver_metrics *metrics)
@@ -229,7 +231,7 @@ void monero_solver_cl_work_thread(void *arg)
       // EXEC KERNEL
       size_t global_offset = nonce;
       size_t global_threads = NTHREADS;
-      size_t local_threads = 1;
+      size_t local_threads = LTHREADS;
 
       ret = clEnqueueNDRangeKernel(ctx->command_queue, ctx->cryptonight_kernel,
                                    1, &global_offset, &global_threads,
@@ -493,6 +495,15 @@ bool monero_solver_cl_context_query_device(struct monero_solver_cl_context *gpu)
   log_debug("Device query success: CL_DEVICE_GLOBAL_MEM_SIZE: %lu",
             gpu->device_total_memsize);
 
+  ret = clGetDeviceInfo(gpu->device_id, CL_DEVICE_MAX_MEM_ALLOC_SIZE,
+                        sizeof(cl_ulong), &gpu->device_max_memalloc_size, NULL);
+  if (ret != CL_SUCCESS) {
+    log_error("Error when querying CL_DEVICE_MAX_MEM_ALLOC_SIZE");
+    return false;
+  }
+  log_debug("Device query success: CL_DEVICE_MAX_MEM_ALLOC_SIZE: %lu",
+            gpu->device_max_memalloc_size);
+
   ret = clGetDeviceInfo(gpu->device_id, CL_DEVICE_LOCAL_MEM_SIZE,
                         sizeof(cl_ulong), &gpu->device_local_memsize, NULL);
   if (ret != CL_SUCCESS) {
@@ -596,11 +607,15 @@ bool monero_solver_cl_context_prepare_kernel(
     return false;
   }
 
-  ctx->scratchpad_buffer = clCreateBuffer(ctx->cl_ctx, CL_MEM_READ_WRITE,
-                                          SCRATCHPAD_BUFFER_SIZE, NULL, &ret);
+  log_debug("Allocating scratchpad buffer of %lu bytes",
+            SCRATCHPAD_BUFFER_SIZE);
+  ctx->scratchpad_buffer =
+      clCreateBuffer(ctx->cl_ctx, CL_MEM_READ_WRITE | CL_MEM_HOST_NO_ACCESS,
+                     SCRATCHPAD_BUFFER_SIZE, NULL, &ret);
   if (ret != CL_SUCCESS) {
-    log_error("Error when calling clCreateBuffer for scratchpad buffer: %s",
-              cl_err_str(ret));
+    log_error("Error when calling clCreateBuffer for scratchpad buffer of "
+              "size(%lu): %s",
+              (size_t)SCRATCHPAD_BUFFER_SIZE, cl_err_str(ret));
     return false;
   }
 

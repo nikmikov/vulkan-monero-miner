@@ -17,17 +17,17 @@ INSTALL=install
 BUILDDIR=../build
 
 FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DBG) -msse2 -maes -march=native $(CFLAGS) -I ./
-FINAL_LDFLAGS=$(LDFLAGS) $(DBG) -luv -framework OpenCL
+FINAL_LDFLAGS=$(LDFLAGS) $(DBG) -luv
 FINAL_LIBS=-lm
 DEBUG=-g -ggdb
 
 ifeq ($(uname_S),Darwin)
 # Darwin
-	FINAL_LIBS+= -ldl
+	FINAL_LIBS+= -ldl -framework OpenCL
 else
 # All the other OSes (notably Linux)
 	FINAL_LDFLAGS+= -rdynamic
-	FINAL_LIBS+=-ldl -pthread
+	FINAL_LIBS+=-ldl -pthread -lOpenCL
 endif
 
 DORENOM_CC=$(CC) $(FINAL_CFLAGS)
