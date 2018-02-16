@@ -10,8 +10,8 @@
 #include "crypto/keccak-tiny.h"
 #include "crypto/skein.h"
 #include "utils/hex.h"
+#include "utils/unused.h"
 
-#define UNUSED_ARG(a) ((void)a)
 #define DIGEST_LENGTH_BITS 256
 #define DIGEST_LENGTH_BYTES (DIGEST_LENGTH_BITS / 8)
 
@@ -260,8 +260,8 @@ int test_cryptonight()
 
 int main(int argc, char **argv)
 {
-  UNUSED_ARG(argc);
-  UNUSED_ARG(argv);
+  UNUSED(argc);
+  UNUSED(argv);
 
   int failures = 0;
   failures += test_hash("SHA-3", SHA3_256_RESULTS, do_sha3);

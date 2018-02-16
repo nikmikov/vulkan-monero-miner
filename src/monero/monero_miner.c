@@ -62,7 +62,7 @@ void monero_miner_print_metrics(uv_timer_t *handle)
   char *buf_ptr = stpcpy(buf, "Metrics Cur:Avg:Sol ");
   struct monero_solver_metrics metrics;
   for (size_t i = 0; i < miner->solvers_len; ++i) {
-    miner->solvers[i]->get_metrics(miner->solvers[i], &metrics);
+    monero_solver_get_metrics(miner->solvers[i], &metrics);
     uint64_t cur = (metrics.hashes_processed_total - miner->hashes_prev[i]) /
                    PRINT_METRICS_SEC;
     miner->hashes_prev[i] = metrics.hashes_processed_total;
@@ -83,12 +83,13 @@ void monero_miner_submit(int solver_id, struct monero_solution *solution,
     return;
   }
 
+  const uint32_t nonce = monero_solution_nonce(solution);
   log_info("#%d: Solution found: nonce: %x, solution: %lx, target: %lx",
-           solver_id, solution->nonce, monero_solution_hash_val(solution->hash),
+           solver_id, nonce, monero_solution_hash_val(solution->hash),
            miner->target);
   struct monero_result result = {0, .nonce = 0};
   result.job_id = miner->job_id;
-  result.nonce = solution->nonce;
+  result.nonce = nonce;
   hex_from_binary(solution->hash, MONERO_OUTPUT_HASH_LEN, result.hash);
 
   struct miner_event_result_found result_found_evt;
@@ -150,7 +151,7 @@ void monero_miner_new_job(miner_handle handle, void *job_data,
   size_t blob_len = strlen(job->blob);
   uint8_t *input_hash = calloc(1, 1 + blob_len / 2);
   size_t input_hash_len = hex_to_binary(job->blob, blob_len, input_hash);
-  if (input_hash_len > MONERO_INPUT_HASH_MAX_LEN) {
+  if (input_hash_len > MONERO_INPUT_HASH_LEN) {
     log_error("Input hash length(%lu)is too large", input_hash_len);
     goto FREE;
   }
@@ -175,9 +176,9 @@ void monero_miner_new_job(miner_handle handle, void *job_data,
   // split nonce into work chunks of equal size
   for (size_t i = 0; i < miner->solvers_len; ++i) {
     uint32_t nonce_to = nonce_from + miner->nonce_chunk_size;
-    miner->solvers[i]->work(miner->solvers[i], monero_miner_submit, miner,
-                            miner->job_seq_id, input_hash, input_hash_len,
-                            miner->target, nonce_from, nonce_to);
+    monero_solver_work(miner->solvers[i], monero_miner_submit, miner,
+                       miner->job_seq_id, input_hash, input_hash_len,
+                       miner->target, nonce_from, nonce_to);
     nonce_from = nonce_to;
   }
 FREE:

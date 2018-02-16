@@ -10,192 +10,58 @@
 #include "crypto/cryptonight/cryptonight.h"
 #include "logging.h"
 #include "monero/monero_config.h"
-#include "utils/affinity.h"
+#include "utils/unused.h"
 
 #define SOLUTIONS_BUFFER_SIZE 32
 
 struct monero_solver_cpu {
   struct monero_solver solver;
 
-  /** set to false to terminate worker thread */
-  atomic_bool is_alive;
-
-  /** worker thread */
-  uv_thread_t worker;
-
   /** cryptonight context */
   struct cryptonight_ctx *cryptonight_ctx;
+  struct cryptonight_hash output_hash;
 
   /** current job */
-  atomic_int job_id;
-  uint8_t input_hash[MONERO_INPUT_HASH_MAX_LEN];
-  size_t input_hash_len;
+  const uint8_t *input_hash;
+  uint32_t *nonce_ptr;
   uint64_t target;
-  uint32_t nonce_from;
-  uint32_t nonce_to;
-  // submit callback
-  monero_solver_submit submit;
-  void *submit_data;
-
-  /** solution data */
-  uv_async_t solution_found_async; // async handle on solution found
-  uv_mutex_t solution_lock;
-  struct monero_solution solutions[SOLUTIONS_BUFFER_SIZE];
-  size_t num_solutions;
-
-  // quick metrics
-  struct monero_solver_metrics metrics;
-  atomic_int hashes_counter;
 };
 
-void monero_solver_cpu_get_metrics(struct monero_solver *solver,
-                                   struct monero_solver_metrics *metrics)
+bool monero_solver_cpu_set_job(struct monero_solver *ptr,
+                               const uint8_t *input_hash, const uint64_t target)
 {
-  assert(solver != NULL);
-  assert(metrics != NULL);
-  struct monero_solver_cpu *s = (struct monero_solver_cpu *)solver;
-
-  s->metrics.hashes_processed_total += atomic_exchange(&s->hashes_counter, 0);
-  *metrics = s->metrics;
-}
-
-static inline void metrics_add_solution(struct monero_solver_metrics *m,
-                                        uint64_t sol)
-{
-  ++m->solutions_found;
-  for (size_t i = 0; i < m->solutions_found && i < 10; ++i) {
-    if (m->top_10_solutions[i] > sol) {
-      uint64_t tmp = m->top_10_solutions[i];
-      m->top_10_solutions[i] = sol;
-      sol = tmp;
-    }
-  }
-}
-
-/** Called from worker thread on main loop when solution found */
-void monero_solver_cpu_solution_found(uv_async_t *handle)
-{
-  assert(handle->data);
-  struct monero_solver_cpu *solver = (struct monero_solver_cpu *)handle->data;
-  struct monero_solution solutions[solver->num_solutions];
-  size_t num_solutions = 0;
-  uv_mutex_lock(&solver->solution_lock);
-  assert(solver->num_solutions > 0);
-  // copy solutions buffer
-  num_solutions = solver->num_solutions;
-  memcpy(solutions, solver->solutions,
-         sizeof(struct monero_solution) * num_solutions);
-  solver->num_solutions = 0;
-  uv_mutex_unlock(&solver->solution_lock);
-
-  // submit solution
-  assert(solver->submit != NULL);
-  for (size_t i = 0; i < num_solutions; ++i) {
-    solver->submit(solver->solver.solver_id, &solutions[i],
-                   solver->submit_data);
-    metrics_add_solution(&solver->metrics,
-                         monero_solution_hash_val(solutions[i].hash));
-  }
-}
-
-void monero_solver_cpu_work_thread(void *arg)
-{
-  log_debug("Worker thread started");
-  struct monero_solver_cpu *solver = arg;
-  int current_job_id = 0;
-  struct cryptonight_hash output_hash;
-  // bytes 24..31 is what we are looking for
-  uint64_t target = 0;
-  uint8_t input_hash[MONERO_INPUT_HASH_MAX_LEN];
-  uint32_t nonce = 0, nonce_to = 0;
-  size_t input_hash_len = 0;
-  uint32_t *nonce_val = (uint32_t *)&input_hash[MONERO_NONCE_POSITION];
-  while (atomic_load(&solver->is_alive)) {
-    int j = atomic_load(&solver->job_id);
-    if (j != current_job_id) {
-      // load new job
-      input_hash_len = solver->input_hash_len;
-      assert(input_hash_len <= MONERO_INPUT_HASH_MAX_LEN);
-      if (input_hash_len < MONERO_NONCE_POSITION + 4) {
-        log_error("Work #%d: Invalid input hash len: %lu", input_hash_len);
-        continue;
-      }
-      // copy hash
-      memcpy(input_hash, solver->input_hash, input_hash_len);
-      // nonces
-      nonce = solver->nonce_from;
-      nonce_to = solver->nonce_to;
-      // target
-      target = solver->target;
-      current_job_id = j;
-    } else if (nonce < nonce_to) { // work job
-      // insert 4-byte nonce into job blob @ bytes 39..42
-      *nonce_val = nonce;
-      // run cryptonight
-      cryptonight_aesni(input_hash, input_hash_len, &output_hash,
-                        solver->cryptonight_ctx);
-      // check target
-      if (monero_solution_hash_val(output_hash.data) < target) {
-        // solution found
-        uv_mutex_lock(&solver->solution_lock);
-        if (solver->num_solutions < SOLUTIONS_BUFFER_SIZE) {
-          struct monero_solution *sol =
-              &solver->solutions[solver->num_solutions++];
-          sol->job_id = current_job_id;
-          sol->nonce = nonce;
-          memcpy(sol->hash, output_hash.data, MONERO_OUTPUT_HASH_LEN);
-        } else {
-          log_error("Solutions buffer full!");
-        }
-        uv_mutex_unlock(&solver->solution_lock);
-        uv_async_send(&solver->solution_found_async); // notify main loop
-      }
-      atomic_fetch_add(&solver->hashes_counter, 1);
-      ++nonce;
-    } else {
-      log_debug("No work available. Z-z-z-z...");
-      sleep(1);
-    }
-  }
-  log_debug("Worker thread quit");
-}
-
-void monero_solver_cpu_work(struct monero_solver *ptr,
-                            monero_solver_submit submit, void *submit_data,
-                            int job_id, const uint8_t *input_hash,
-                            size_t input_hash_len, uint64_t target,
-                            uint32_t nonce_from, uint32_t nonce_to)
-{
-  assert(ptr != NULL);
-  assert(submit != NULL);
-  assert(submit_data != NULL);
-  assert(input_hash != NULL);
   struct monero_solver_cpu *solver = (struct monero_solver_cpu *)ptr;
-  assert(input_hash_len <= MONERO_INPUT_HASH_MAX_LEN);
-  log_debug("New work: %lu, target: %lx, nonce: %x - %x, %u hashes to go",
-            job_id, target, nonce_from, nonce_to, (nonce_to - nonce_from));
-  solver->submit = submit;
-  solver->submit_data = submit_data;
-  memcpy(solver->input_hash, input_hash, input_hash_len);
-  solver->input_hash_len = input_hash_len;
+  solver->input_hash = input_hash;
   solver->target = target;
-  solver->nonce_from = nonce_from;
-  solver->nonce_to = nonce_to;
+  solver->nonce_ptr = (uint32_t *)&solver->input_hash[MONERO_NONCE_POSITION];
+  return true;
+}
 
-  atomic_store(&solver->job_id, job_id); // signal worker of job change
+// *output_hash: SOLUTIONS_BUFFER_SIZE * MONERO_OUTPUT_HASH_LEN
+int monero_solver_cpu_process(struct monero_solver *ptr, uint32_t nonce_from,
+                              uint8_t *output_hash, size_t *output_hashes_num)
+{
+  struct monero_solver_cpu *solver = (struct monero_solver_cpu *)ptr;
+
+  *solver->nonce_ptr = nonce_from;
+  cryptonight_aesni(solver->input_hash, MONERO_INPUT_HASH_LEN,
+                    &solver->output_hash, solver->cryptonight_ctx);
+
+  if (monero_solution_hash_val(solver->output_hash.data) < solver->target) {
+    // solution found
+    memcpy(output_hash, solver->output_hash.data, MONERO_OUTPUT_HASH_LEN);
+    *output_hashes_num = 1;
+  }
+  return 1;
 }
 
 void monero_solver_cpu_free(struct monero_solver *ptr)
 {
   struct monero_solver_cpu *solver = (struct monero_solver_cpu *)ptr;
-  atomic_store(&solver->is_alive, false);
 
-  uv_thread_join(&solver->worker);
-  uv_close((uv_handle_t *)&solver->solution_found_async, NULL);
-  uv_mutex_destroy(&solver->solution_lock);
   cryptonight_ctx_free(&solver->cryptonight_ctx);
 
-  free(solver);
+  free(ptr);
 }
 
 struct monero_solver *
@@ -205,30 +71,16 @@ monero_solver_new_cpu(const struct monero_config_solver_cpu *cfg)
 
   struct monero_solver_cpu *solver_cpu =
       calloc(1, sizeof(struct monero_solver_cpu));
-  atomic_store(&solver_cpu->job_id, 0);
-  atomic_store(&solver_cpu->is_alive, true);
-  solver_cpu->solver.work = monero_solver_cpu_work;
+
+  solver_cpu->solver.set_job = monero_solver_cpu_set_job;
+  solver_cpu->solver.process = monero_solver_cpu_process;
   solver_cpu->solver.free = monero_solver_cpu_free;
-  solver_cpu->solver.get_metrics = monero_solver_cpu_get_metrics;
 
-  solver_cpu->cryptonight_ctx = cryptonight_ctx_new();
-  uv_mutex_init(&solver_cpu->solution_lock);
-  uv_async_init(uv_default_loop(), &solver_cpu->solution_found_async,
-                monero_solver_cpu_solution_found);
-  solver_cpu->solution_found_async.data = solver_cpu;
-  uv_thread_create(&solver_cpu->worker, monero_solver_cpu_work_thread,
-                   solver_cpu);
-
-  int affinity = cfg->solver.affine_to_cpu;
-  if (affinity >= 0) {
-    bool r = uv_thread_set_affinity(solver_cpu->worker, (uint64_t)affinity);
-    if (!r) {
-      log_warn("CPU affinity not set");
-    } else {
-      log_info("Set CPU affinity: %d", affinity);
-    }
+  if (monero_solver_init(&cfg->solver, &solver_cpu->solver)) {
+    solver_cpu->cryptonight_ctx = cryptonight_ctx_new();
+    return &solver_cpu->solver;
+  } else {
+    free(solver_cpu);
+    return NULL;
   }
-
-  atomic_store(&solver_cpu->hashes_counter, 0);
-  return (struct monero_solver *)solver_cpu;
 }

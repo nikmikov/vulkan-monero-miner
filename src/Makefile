@@ -36,11 +36,11 @@ DORENOM_RES=$(CXX) --std=c++11
 
 DORENOM_EXECUTABLE=dorenom
 CRYPTONIGHT_OBJS=crypto/blake.o crypto/jh.o crypto/groestl.o crypto/cryptonight/cryptonight.o crypto/keccak-tiny.o crypto/skein.o
-MONERO_OBJS=monero/monero_config.o monero/monero_job.o monero/monero_miner.o monero/monero_stratum.o monero/monero_solver_cl.o monero/monero_solver_cpu.o $(CRYPTONIGHT_OBJS)
+MONERO_OBJS=monero/monero_config.o monero/monero_job.o monero/monero_miner.o monero/monero_solver.o monero/monero_stratum.o  monero/monero_solver_cl.o monero/monero_solver_cpu.o $(CRYPTONIGHT_OBJS)
 DORENOM_OBJS=buffer.o cli_opts.o config.o connection.o console.o currency.o cJSON/cJSON.o dorenom.o resources.o foreman.o miner.o stratum.o utils/opencl_err.o $(MONERO_OBJS)
 
 CRYPTO_TESTS=crypto-tests
-CRYPTO_TESTS_OBJS=crypto/crypto-tests.o $(CRYPTONIGHT_OBJS)
+CRYPTO_TESTS_OBJS=crypto/crypto-tests.o $(CRYPTONIGHT_OBJS) console.o
 
 all: $(DORENOM_EXECUTABLE)
 .PHONY: all

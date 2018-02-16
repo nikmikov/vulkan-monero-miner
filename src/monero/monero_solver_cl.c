@@ -2,20 +2,20 @@
 
 #include "logging.h"
 #include <assert.h>
-#include <stdatomic.h>
 #include <uv.h>
 
 #include "monero.h"
 
-#include "utils/affinity.h"
 #include "utils/opencl_inc.h"
-#include "utils/port_sleep.h"
 
 #include "resources.h"
 #include "utils/opencl_err.h"
+#include "utils/port_sleep.h"
 
-#define SOLUTIONS_BUFFER_SIZE 32
-#define CRYPTONIGHT_MEMORY 2097152
+#define INPUT_BUFFER_SIZE MONERO_INPUT_HASH_LEN
+#define SCRATCHPAD_BUFFER_SIZE(threads)                                        \
+  ((size_t)threads * MONERO_CRYPTONIGHT_MEMORY)
+#define OUTPUT_BUFFER_SIZE(threads) ((size_t)threads * 1600)
 
 struct monero_solver_cl_context {
   /** Config options */
@@ -54,260 +54,107 @@ void monero_solver_cl_context_release(struct monero_solver_cl_context *cl);
 struct monero_solver_cl {
   struct monero_solver solver;
 
-  /** GPU context */
+  /** CL context */
   struct monero_solver_cl_context *cl;
 
-  /** set to false to terminate worker thread */
-  atomic_bool is_alive;
-
-  /** worker thread */
-  uv_thread_t worker;
-
-  /** current job */
-  atomic_int job_id;
-  uint8_t input_hash[MONERO_INPUT_HASH_MAX_LEN];
-  size_t input_hash_len;
-  uint64_t target;
-  uint32_t nonce_from;
-  uint32_t nonce_to;
-
-  // submit callback
-  monero_solver_submit submit;
-  void *submit_data;
-
-  /** solution data */
-  uv_async_t solution_found_async; // async handle on solution found
-  uv_mutex_t solution_lock;
-  struct monero_solution solutions[SOLUTIONS_BUFFER_SIZE];
-  size_t num_solutions;
-
-  // quick metrics
-  struct monero_solver_metrics metrics;
-  atomic_int hashes_counter;
+  /** output buffer */
+  uint8_t *output_buffer;
 };
 
-#define INPUT_BUFFER_SIZE 88
-#define SCRATCHPAD_BUFFER_SIZE(threads) ((size_t)threads * 88)
-#define OUTPUT_BUFFER_SIZE(threads) ((size_t)threads * 1600)
-
-void monero_solver_cl_get_metrics(struct monero_solver *solver,
-                                  struct monero_solver_metrics *metrics)
+bool monero_solver_cl_set_job(struct monero_solver *ptr,
+                              const uint8_t *input_hash, const uint64_t target)
 {
-  assert(solver != NULL);
-  assert(metrics != NULL);
-  struct monero_solver_cl *s = (struct monero_solver_cl *)solver;
-
-  s->metrics.hashes_processed_total += atomic_exchange(&s->hashes_counter, 0);
-  *metrics = s->metrics;
-}
-
-static inline void metrics_add_solution(struct monero_solver_metrics *m,
-                                        uint64_t sol)
-{
-  ++m->solutions_found;
-  for (size_t i = 0; i < m->solutions_found && i < 10; ++i) {
-    if (m->top_10_solutions[i] > sol) {
-      uint64_t tmp = m->top_10_solutions[i];
-      m->top_10_solutions[i] = sol;
-      sol = tmp;
-    }
-  }
-}
-
-/** Called from worker thread on main loop when solution found */
-void monero_solver_cl_solution_found(uv_async_t *handle)
-{
-  assert(handle->data);
-  struct monero_solver_cl *solver = (struct monero_solver_cl *)handle->data;
-  struct monero_solution solutions[solver->num_solutions];
-  size_t num_solutions = 0;
-  uv_mutex_lock(&solver->solution_lock);
-  assert(solver->num_solutions > 0);
-  // copy solutions buffer
-  num_solutions = solver->num_solutions;
-  memcpy(solutions, solver->solutions,
-         sizeof(struct monero_solution) * num_solutions);
-  solver->num_solutions = 0;
-  uv_mutex_unlock(&solver->solution_lock);
-
-  // submit solution
-  assert(solver->submit != NULL);
-  for (size_t i = 0; i < num_solutions; ++i) {
-    solver->submit(solver->solver.solver_id, &solutions[i],
-                   solver->submit_data);
-    metrics_add_solution(&solver->metrics,
-                         monero_solution_hash_val(solutions[i].hash));
-  }
-}
-
-void monero_solver_cl_work_thread(void *arg)
-{
-  log_debug("CL Worker thread started");
-  struct monero_solver_cl *solver = arg;
+  cl_uint ret;
+  struct monero_solver_cl *solver = (struct monero_solver_cl *)ptr;
   struct monero_solver_cl_context *ctx = solver->cl;
+  assert(ctx != NULL);
+  // INPUT BUFFER DATA
+  ret = clEnqueueWriteBuffer(ctx->command_queue, ctx->input_buffer, CL_TRUE, 0,
+                             INPUT_BUFFER_SIZE, input_hash, 0, NULL, NULL);
 
-  int current_job_id = 0;
+  if (ret != CL_SUCCESS) {
+    log_error("Error when calling clEnqueueWriteBuffer with input data: %s",
+              cl_err_str(ret));
+    return false;
+  }
 
-  // bytes 24..31 is what we are looking for
-  uint64_t target = 0;
-  uint8_t input_hash[MONERO_INPUT_HASH_MAX_LEN];
-  uint32_t nonce = 0, nonce_to = 0;
-  size_t input_hash_len = 0;
+  // INPUT
+  ret = clSetKernelArg(ctx->cryptonight_kernel, 0, sizeof(cl_mem),
+                       &ctx->input_buffer);
+  if (ret != CL_SUCCESS) {
+    log_error("Error when calling clSetKernelArg for arg #0[input_buffer]: %s",
+              cl_err_str(ret));
+    return false;
+  }
 
-  bool opencl_new_data = false;
-  bool opencl_kernel_ready = false;
+  // SCRATCHPAD
+  ret = clSetKernelArg(ctx->cryptonight_kernel, 1, sizeof(cl_mem),
+                       &ctx->scratchpad_buffer);
+  if (ret != CL_SUCCESS) {
+    log_error(
+        "Error when calling clSetKernelArg for arg #1[scratchpad_buffer]: %s",
+        cl_err_str(ret));
+    return false;
+    ;
+  }
+
+  // OUTPUT BUFFER
+  ret = clSetKernelArg(ctx->cryptonight_kernel, 2, sizeof(cl_mem),
+                       &ctx->output_buffer);
+  if (ret != CL_SUCCESS) {
+    log_error("Error when calling clSetKernelArg for arg #2[output_buffer]: %s",
+              cl_err_str(ret));
+    return false;
+  }
+  return true;
+}
+
+// *output_hash: SOLUTIONS_BUFFER_SIZE * MONERO_OUTPUT_HASH_LEN
+int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from,
+                             uint8_t *output_hash, size_t *output_hashes_num)
+{
+  cl_uint ret;
+  struct monero_solver_cl *solver = (struct monero_solver_cl *)ptr;
+  struct monero_solver_cl_context *ctx = solver->cl;
+  assert(ctx != NULL);
 
   const size_t global_work_size = solver->cl->intensity;
   const size_t local_work_size = solver->cl->worksize;
   const size_t output_buffer_size = OUTPUT_BUFFER_SIZE(global_work_size);
-  char *hash_output = calloc(1, output_buffer_size);
 
-  cl_int ret;
-  while (atomic_load(&solver->is_alive)) {
-    int j = atomic_load(&solver->job_id);
-    if (j != current_job_id) {
-      log_warn("Worker thread received job");
-      // load new job into local buffer
-      input_hash_len = solver->input_hash_len;
-      assert(input_hash_len <= MONERO_INPUT_HASH_MAX_LEN);
-      if (input_hash_len < MONERO_NONCE_POSITION + 4 ||
-          input_hash_len > INPUT_BUFFER_SIZE) {
-        log_error("Work #%d: Invalid input hash len: %lu", input_hash_len);
-        continue;
-      }
-      // copy hash
-      memcpy(input_hash, solver->input_hash, input_hash_len);
-      // nonces
-      nonce = solver->nonce_from;
-      nonce_to = solver->nonce_to;
-      // target
-      target = solver->target;
-      current_job_id = j;
-      opencl_new_data = true;
-      opencl_kernel_ready = false;
-    } else if (opencl_new_data) { // send new input to GPU
-      opencl_new_data = false;
-      assert(ctx != NULL);
-      // INPUT BUFFER DATA
-      ret =
-          clEnqueueWriteBuffer(ctx->command_queue, ctx->input_buffer, CL_TRUE,
-                               0, INPUT_BUFFER_SIZE, input_hash, 0, NULL, NULL);
-      if (ret != CL_SUCCESS) {
-        log_error("Error when calling clEnqueueWriteBuffer with input data: %s",
-                  cl_err_str(ret));
-        continue;
-      }
+  size_t global_offset = nonce_from;
 
-      // INPUT
-      ret = clSetKernelArg(ctx->cryptonight_kernel, 0, sizeof(cl_mem),
-                           &ctx->input_buffer);
-      if (ret != CL_SUCCESS) {
-        log_error(
-            "Error when calling clSetKernelArg for arg #0[input_buffer]: %s",
-            cl_err_str(ret));
-        continue;
-        ;
-      }
-
-      // SCRATCHPAD
-      ret = clSetKernelArg(ctx->cryptonight_kernel, 1, sizeof(cl_mem),
-                           &ctx->scratchpad_buffer);
-      if (ret != CL_SUCCESS) {
-        log_error("Error when calling clSetKernelArg for arg "
-                  "#1[scratchpad_buffer]: %s",
-                  cl_err_str(ret));
-        continue;
-        ;
-      }
-
-      // OUTPUT BUFFER
-      ret = clSetKernelArg(ctx->cryptonight_kernel, 2, sizeof(cl_mem),
-                           &ctx->output_buffer);
-      if (ret != CL_SUCCESS) {
-        log_error(
-            "Error when calling clSetKernelArg for arg #2[output_buffer]: %s",
-            cl_err_str(ret));
-        continue;
-        ;
-      }
-      opencl_kernel_ready = true;
-    } else if (opencl_kernel_ready && nonce < nonce_to) { // work job
-      // run cryptonight
-
-      // EXEC KERNEL
-      size_t global_offset = nonce;
-
-      ret = clEnqueueNDRangeKernel(ctx->command_queue, ctx->cryptonight_kernel,
-                                   1, &global_offset, &global_work_size,
-                                   &local_work_size, 0, NULL, NULL);
-      if (ret != CL_SUCCESS) {
-        log_error("Error when calling clEnqueueNDRangeKernel: %s",
-                  cl_err_str(ret));
-        opencl_kernel_ready = false;
-        continue;
-      }
-
-      // READ RESULTS
-      ret = clEnqueueReadBuffer(ctx->command_queue, ctx->output_buffer, CL_TRUE,
-                                0, output_buffer_size, hash_output, 0, NULL,
-                                NULL);
-      if (ret != CL_SUCCESS) {
-        log_error("Error when calling clEnqueueReadBuffer to fetch results: %s",
-                  cl_err_str(ret));
-        continue;
-      }
-      atomic_fetch_add(&solver->hashes_counter, (int)global_work_size);
-
-      nonce += global_work_size;
-      // break;
-    } else {
-      log_debug("No work available. Z-z-z-z...");
-      port_sleep(1);
-    }
+  ret = clEnqueueNDRangeKernel(ctx->command_queue, ctx->cryptonight_kernel, 1,
+                               &global_offset, &global_work_size,
+                               &local_work_size, 0, NULL, NULL);
+  if (ret != CL_SUCCESS) {
+    log_error("Error when calling clEnqueueNDRangeKernel: %s", cl_err_str(ret));
+    return -1;
   }
-  free(hash_output);
-  log_debug("CL Worker thread quit");
-}
 
-void monero_solver_cl_work(struct monero_solver *ptr,
-                           monero_solver_submit submit, void *submit_data,
-                           int job_id, const uint8_t *input_hash,
-                           size_t input_hash_len, uint64_t target,
-                           uint32_t nonce_from, uint32_t nonce_to)
-{
-  assert(ptr != NULL);
-  assert(submit != NULL);
-  assert(submit_data != NULL);
-  assert(input_hash != NULL);
-
-  struct monero_solver_cl *solver = (struct monero_solver_cl *)ptr;
-  assert(input_hash_len <= MONERO_INPUT_HASH_MAX_LEN);
-  log_debug("New work: %lu, target: %lx, nonce: %x - %x, %u hashes to go",
-            job_id, target, nonce_from, nonce_to, (nonce_to - nonce_from));
-  solver->submit = submit;
-  solver->submit_data = submit_data;
-  memcpy(solver->input_hash, input_hash, input_hash_len);
-  solver->input_hash_len = input_hash_len;
-  solver->target = target;
-  solver->nonce_from = nonce_from;
-  solver->nonce_to = nonce_to;
-
-  atomic_store(&solver->job_id, job_id); // signal worker of job change
+  // READ RESULTS
+  ret = clEnqueueReadBuffer(ctx->command_queue, ctx->output_buffer, CL_TRUE, 0,
+                            output_buffer_size, solver->output_buffer, 0, NULL,
+                            NULL);
+  if (ret != CL_SUCCESS) {
+    log_error("Error when calling clEnqueueReadBuffer to fetch results: %s",
+              cl_err_str(ret));
+    return -1;
+  }
+  *output_hashes_num = 0; // TODO: process results
+  return (int)global_work_size;
 }
 
 void monero_solver_cl_free(struct monero_solver *ptr)
 {
   struct monero_solver_cl *solver = (struct monero_solver_cl *)ptr;
-  atomic_store(&solver->is_alive, false);
-  uv_thread_join(&solver->worker);
 
-  uv_close((uv_handle_t *)&solver->solution_found_async, NULL);
-  uv_mutex_destroy(&solver->solution_lock);
-
+  free(solver->output_buffer);
   if (solver->cl != NULL) {
     monero_solver_cl_context_release(solver->cl);
   }
-  free(solver);
+
+  free(ptr);
 }
 
 struct monero_solver *
@@ -319,6 +166,7 @@ monero_solver_new_cl(const struct monero_config_solver_cl *cfg)
   assert(cfg->device_id >= 0);
   assert(cfg->worksize >= 0);
   assert(cfg->intensity >= 0);
+
   struct monero_solver_cl_context *cl = monero_solver_cl_context_init(
       (cl_uint)cfg->platform_id, (cl_uint)cfg->device_id,
       (size_t)cfg->intensity, (size_t)cfg->worksize);
@@ -331,32 +179,21 @@ monero_solver_new_cl(const struct monero_config_solver_cl *cfg)
   struct monero_solver_cl *solver_cl =
       calloc(1, sizeof(struct monero_solver_cl));
 
+  solver_cl->output_buffer = calloc(1, OUTPUT_BUFFER_SIZE(cfg->intensity));
+
   solver_cl->cl = cl;
-  atomic_store(&solver_cl->job_id, 0);
-  atomic_store(&solver_cl->is_alive, true);
-  solver_cl->solver.work = monero_solver_cl_work;
+
+  solver_cl->solver.set_job = monero_solver_cl_set_job;
+  solver_cl->solver.process = monero_solver_cl_process;
   solver_cl->solver.free = monero_solver_cl_free;
-  solver_cl->solver.get_metrics = monero_solver_cl_get_metrics;
 
-  uv_mutex_init(&solver_cl->solution_lock);
-  uv_async_init(uv_default_loop(), &solver_cl->solution_found_async,
-                monero_solver_cl_solution_found);
-  solver_cl->solution_found_async.data = solver_cl;
-  uv_thread_create(&solver_cl->worker, monero_solver_cl_work_thread, solver_cl);
-
-  int affinity = cfg->solver.affine_to_cpu;
-  if (affinity >= 0) {
-    bool r = uv_thread_set_affinity(solver_cl->worker, (uint64_t)affinity);
-    if (!r) {
-      log_warn("CPU affinity not set");
-    } else {
-      log_info("Set CPU affinity: %d", affinity);
-    }
+  if (monero_solver_init(&cfg->solver, &solver_cl->solver)) {
+    return &solver_cl->solver;
+  } else {
+    monero_solver_cl_context_release(solver_cl->cl);
+    free(solver_cl);
+    return NULL;
   }
-
-  atomic_store(&solver_cl->hashes_counter, 0);
-
-  return &solver_cl->solver;
 }
 
 struct monero_solver_cl_context *
@@ -454,6 +291,15 @@ monero_solver_cl_context_init(cl_uint platform_id, cl_uint device_id,
 
 void monero_solver_cl_context_release(struct monero_solver_cl_context *ctx)
 {
+  if (ctx->scratchpad_buffer != NULL) {
+    clReleaseMemObject(ctx->scratchpad_buffer);
+  }
+  if (ctx->output_buffer != NULL) {
+    clReleaseMemObject(ctx->output_buffer);
+  }
+  if (ctx->input_buffer != NULL) {
+    clReleaseMemObject(ctx->input_buffer);
+  }
   if (ctx->cryptonight_kernel != NULL) {
     clReleaseKernel(ctx->cryptonight_kernel);
   }

@@ -1,9 +1,8 @@
 #include "buffer.h"
 
+#include "utils/unused.h"
 #include <assert.h>
 #include <stdlib.h>
-
-#define UNUSED(x) (void)(x)
 
 /** Generic buffer allocation, needed by uv_read_start */
 void buffer_alloc(uv_handle_t *h, size_t suggested_size, uv_buf_t *buf)
