@@ -107,24 +107,21 @@ void monero_solver_work_thread(void *arg)
   size_t input_hash_len = 0;
   uint64_t target = 0;
   uint8_t output_hash[MONERO_OUTPUT_HASH_LEN * SOLUTIONS_BUFFER_SIZE];
+  uint32_t output_nonces[SOLUTIONS_BUFFER_SIZE];
   bool new_job = false;
   while (atomic_load(&solver->is_alive)) {
     int j = atomic_load(&solver->job_id);
     if (j != current_job_id) {
       // LOAD NEW JOB
+
       nonce = nonce_to = 0;
 
       input_hash_len = MIN(solver->input_hash_len, MONERO_INPUT_HASH_LEN);
-
       if (input_hash_len < MONERO_NONCE_POSITION + 4) {
         log_error("Work #%d: Invalid input hash len: %lu", input_hash_len);
       } else {
         // copy hash
         memcpy(input_hash, solver->input_hash, input_hash_len);
-        if (input_hash_len < MONERO_INPUT_HASH_LEN) {
-          memcpy(input_hash + input_hash_len, 0,
-                 MONERO_INPUT_HASH_LEN - input_hash_len);
-        }
         // nonces
         nonce = solver->nonce_from;
         nonce_to = solver->nonce_to;
@@ -134,8 +131,11 @@ void monero_solver_work_thread(void *arg)
       }
       new_job = true;
     } else if (nonce < nonce_to) {
+      size_t solutions_found = 0;
+
       if (new_job) {
-        if (s->set_job(s, input_hash, target)) {
+        if (s->set_job(s, input_hash, input_hash_len, target, output_hash,
+                       output_nonces, &solutions_found)) {
           new_job = false;
         } else {
           // error
@@ -145,10 +145,7 @@ void monero_solver_work_thread(void *arg)
         }
       }
       // PROCESS ONE CHUNK
-      size_t solutions_found = 0;
-
-      int nonces_processed =
-          s->process(s, nonce, output_hash, &solutions_found);
+      int nonces_processed = s->process(s, nonce);
       bool success = nonces_processed >= 0;
       if (success && solutions_found > 0) {
         uv_mutex_lock(&solver->solution_lock);
@@ -158,6 +155,7 @@ void monero_solver_work_thread(void *arg)
             struct monero_solution *sol =
                 &solver->solutions[solver->num_solutions++];
             sol->job_id = current_job_id;
+            sol->nonce = output_nonces[i];
             memcpy(sol->hash, &output_hash[MONERO_OUTPUT_HASH_LEN * i],
                    MONERO_OUTPUT_HASH_LEN);
           } else {
@@ -211,7 +209,7 @@ bool monero_solver_init(const struct monero_config_solver *cfg,
   uv_mutex_init(&solver->solution_lock);
   uv_async_init(uv_default_loop(), &solver->solution_found_async,
                 monero_solver_solution_found);
-  solver->solution_found_async.data = solver;
+  solver->solution_found_async.data = s;
 
   s->internal = solver;
   uv_thread_create(&solver->worker, monero_solver_work_thread, s);

@@ -174,7 +174,11 @@ void monero_stratum_handle_json_response(
                                               err_msg, event_handler);
     break;
   case MONERO_STRATUM_MESSAGE_TYPE_SUBMIT_SHARE:
-    log_info("Share accepted");
+    if (err_msg == NULL) {
+      log_info("Share accepted");
+    } else {
+      log_error("Share rejected: %s", err_msg);
+    }
     break;
   case MONERO_STRATUM_MESSAGE_TYPE_KEEPALIVE:
     log_info("Heartbeat received");

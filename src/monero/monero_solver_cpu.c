@@ -19,38 +19,51 @@ struct monero_solver_cpu {
 
   /** cryptonight context */
   struct cryptonight_ctx *cryptonight_ctx;
-  struct cryptonight_hash output_hash;
+  struct cryptonight_hash cryptonight_output_hash;
 
   /** current job */
   const uint8_t *input_hash;
+  size_t input_hash_len;
   uint32_t *nonce_ptr;
   uint64_t target;
+  uint8_t *output_hash;
+  uint32_t *output_nonces;
+  size_t *output_num;
 };
 
 bool monero_solver_cpu_set_job(struct monero_solver *ptr,
-                               const uint8_t *input_hash, const uint64_t target)
+                               const uint8_t *input_hash, size_t input_hash_len,
+                               const uint64_t target, uint8_t *output_hash,
+                               uint32_t *output_nonces, size_t *output_num)
 {
   struct monero_solver_cpu *solver = (struct monero_solver_cpu *)ptr;
   solver->input_hash = input_hash;
+  solver->input_hash_len = input_hash_len;
   solver->target = target;
   solver->nonce_ptr = (uint32_t *)&solver->input_hash[MONERO_NONCE_POSITION];
+  solver->output_hash = output_hash;
+  solver->output_nonces = output_nonces;
+  solver->output_num = output_num;
   return true;
 }
 
 // *output_hash: SOLUTIONS_BUFFER_SIZE * MONERO_OUTPUT_HASH_LEN
-int monero_solver_cpu_process(struct monero_solver *ptr, uint32_t nonce_from,
-                              uint8_t *output_hash, size_t *output_hashes_num)
+int monero_solver_cpu_process(struct monero_solver *ptr, uint32_t nonce_from)
 {
   struct monero_solver_cpu *solver = (struct monero_solver_cpu *)ptr;
 
   *solver->nonce_ptr = nonce_from;
-  cryptonight_aesni(solver->input_hash, MONERO_INPUT_HASH_LEN,
-                    &solver->output_hash, solver->cryptonight_ctx);
+  cryptonight_aesni(solver->input_hash, solver->input_hash_len,
+                    &solver->cryptonight_output_hash, solver->cryptonight_ctx);
 
-  if (monero_solution_hash_val(solver->output_hash.data) < solver->target) {
+  if (monero_solution_hash_val(solver->cryptonight_output_hash.data) <
+      solver->target) {
+    log_debug("Solution found: %x!", *solver->nonce_ptr);
     // solution found
-    memcpy(output_hash, solver->output_hash.data, MONERO_OUTPUT_HASH_LEN);
-    *output_hashes_num = 1;
+    memcpy(solver->output_hash, solver->cryptonight_output_hash.data,
+           MONERO_OUTPUT_HASH_LEN);
+    *solver->output_nonces = nonce_from;
+    *solver->output_num = 1;
   }
   return 1;
 }

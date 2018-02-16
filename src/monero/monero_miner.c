@@ -83,13 +83,12 @@ void monero_miner_submit(int solver_id, struct monero_solution *solution,
     return;
   }
 
-  const uint32_t nonce = monero_solution_nonce(solution);
   log_info("#%d: Solution found: nonce: %x, solution: %lx, target: %lx",
-           solver_id, nonce, monero_solution_hash_val(solution->hash),
+           solver_id, solution->nonce, monero_solution_hash_val(solution->hash),
            miner->target);
   struct monero_result result = {0, .nonce = 0};
   result.job_id = miner->job_id;
-  result.nonce = nonce;
+  result.nonce = solution->nonce;
   hex_from_binary(solution->hash, MONERO_OUTPUT_HASH_LEN, result.hash);
 
   struct miner_event_result_found result_found_evt;

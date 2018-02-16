@@ -9,13 +9,9 @@
 
 struct monero_solution {
   int job_id;
+  uint32_t nonce;
   uint8_t hash[MONERO_OUTPUT_HASH_LEN];
 };
-
-static inline uint32_t monero_solution_nonce(struct monero_solution *s)
-{
-  return *(uint32_t *)&s->hash[MONERO_NONCE_POSITION];
-}
 
 static inline uint64_t monero_solution_hash_val(const uint8_t *hash)
 {
@@ -37,10 +33,11 @@ struct monero_solver {
   struct monero_solver_internal *internal;
   int solver_id;
   bool (*set_job)(struct monero_solver *, const uint8_t *input_hash,
-                  const uint64_t target);
+                  size_t input_hash_len, const uint64_t target,
+                  uint8_t *output_hash, uint32_t *output_nonces,
+                  size_t *output_num);
 
-  int (*process)(struct monero_solver *, uint32_t nonce_from,
-                 uint8_t *output_hash, size_t *output_hashes_num);
+  int (*process)(struct monero_solver *, uint32_t nonce_from);
 
   void (*free)(struct monero_solver *);
 };

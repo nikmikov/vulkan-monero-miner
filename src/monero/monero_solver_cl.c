@@ -59,18 +59,30 @@ struct monero_solver_cl {
 
   /** output buffer */
   uint8_t *output_buffer;
+
+  uint64_t target;
+  uint8_t *output_hash;
+  uint32_t *output_nonces;
+  size_t *output_num;
 };
 
 bool monero_solver_cl_set_job(struct monero_solver *ptr,
-                              const uint8_t *input_hash, const uint64_t target)
+                              const uint8_t *input_hash, size_t input_hash_len,
+                              const uint64_t target, uint8_t *output_hash,
+                              uint32_t *output_nonces, size_t *output_num)
 {
-  cl_uint ret;
   struct monero_solver_cl *solver = (struct monero_solver_cl *)ptr;
+  solver->target = target;
+  solver->output_hash = output_hash;
+  solver->output_nonces = output_nonces;
+  solver->output_num = output_num;
+
+  cl_uint ret;
   struct monero_solver_cl_context *ctx = solver->cl;
   assert(ctx != NULL);
   // INPUT BUFFER DATA
   ret = clEnqueueWriteBuffer(ctx->command_queue, ctx->input_buffer, CL_TRUE, 0,
-                             INPUT_BUFFER_SIZE, input_hash, 0, NULL, NULL);
+                             input_hash_len, input_hash, 0, NULL, NULL);
 
   if (ret != CL_SUCCESS) {
     log_error("Error when calling clEnqueueWriteBuffer with input data: %s",
@@ -110,8 +122,7 @@ bool monero_solver_cl_set_job(struct monero_solver *ptr,
 }
 
 // *output_hash: SOLUTIONS_BUFFER_SIZE * MONERO_OUTPUT_HASH_LEN
-int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from,
-                             uint8_t *output_hash, size_t *output_hashes_num)
+int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from)
 {
   cl_uint ret;
   struct monero_solver_cl *solver = (struct monero_solver_cl *)ptr;
@@ -141,7 +152,7 @@ int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from,
               cl_err_str(ret));
     return -1;
   }
-  *output_hashes_num = 0; // TODO: process results
+  *solver->output_num = 0; // TODO: process results
   return (int)global_work_size;
 }
 
