@@ -18,6 +18,10 @@
 #define CRYPTONIGHT_MEMORY 2097152
 
 struct monero_solver_cl_context {
+  /** Config options */
+  size_t intensity;
+  size_t worksize;
+
   cl_context cl_ctx;
   cl_device_id device_id;
   cl_command_queue command_queue;
@@ -37,7 +41,8 @@ struct monero_solver_cl_context {
 };
 
 struct monero_solver_cl_context *
-monero_solver_cl_context_init(cl_uint platform_id, cl_uint device_id);
+monero_solver_cl_context_init(cl_uint platform_id, cl_uint device_id,
+                              size_t intensity, size_t worksize);
 
 bool monero_solver_cl_context_prepare_kernel(
     struct monero_solver_cl_context *cl);
@@ -81,11 +86,9 @@ struct monero_solver_cl {
   atomic_int hashes_counter;
 };
 
-#define NTHREADS 64
-#define LTHREADS 16
 #define INPUT_BUFFER_SIZE 88
-#define OUTPUT_BUFFER_SIZE (NTHREADS * 1600)
-#define SCRATCHPAD_BUFFER_SIZE ((size_t)NTHREADS * CRYPTONIGHT_MEMORY)
+#define SCRATCHPAD_BUFFER_SIZE(threads) ((size_t)threads * 88)
+#define OUTPUT_BUFFER_SIZE(threads) ((size_t)threads * 1600)
 
 void monero_solver_cl_get_metrics(struct monero_solver *solver,
                                   struct monero_solver_metrics *metrics)
@@ -154,7 +157,10 @@ void monero_solver_cl_work_thread(void *arg)
   bool opencl_new_data = false;
   bool opencl_kernel_ready = false;
 
-  char *hash_output = calloc(1, OUTPUT_BUFFER_SIZE);
+  const size_t global_work_size = solver->cl->intensity;
+  const size_t local_work_size = solver->cl->worksize;
+  const size_t output_buffer_size = OUTPUT_BUFFER_SIZE(global_work_size);
+  char *hash_output = calloc(1, output_buffer_size);
 
   cl_int ret;
   while (atomic_load(&solver->is_alive)) {
@@ -230,12 +236,10 @@ void monero_solver_cl_work_thread(void *arg)
 
       // EXEC KERNEL
       size_t global_offset = nonce;
-      size_t global_threads = NTHREADS;
-      size_t local_threads = LTHREADS;
 
       ret = clEnqueueNDRangeKernel(ctx->command_queue, ctx->cryptonight_kernel,
-                                   1, &global_offset, &global_threads,
-                                   &local_threads, 0, NULL, NULL);
+                                   1, &global_offset, &global_work_size,
+                                   &local_work_size, 0, NULL, NULL);
       if (ret != CL_SUCCESS) {
         log_error("Error when calling clEnqueueNDRangeKernel: %s",
                   cl_err_str(ret));
@@ -245,16 +249,16 @@ void monero_solver_cl_work_thread(void *arg)
 
       // READ RESULTS
       ret = clEnqueueReadBuffer(ctx->command_queue, ctx->output_buffer, CL_TRUE,
-                                0, OUTPUT_BUFFER_SIZE, hash_output, 0, NULL,
+                                0, output_buffer_size, hash_output, 0, NULL,
                                 NULL);
       if (ret != CL_SUCCESS) {
         log_error("Error when calling clEnqueueReadBuffer to fetch results: %s",
                   cl_err_str(ret));
         continue;
       }
-      atomic_fetch_add(&solver->hashes_counter, NTHREADS);
+      atomic_fetch_add(&solver->hashes_counter, (int)global_work_size);
 
-      nonce += NTHREADS;
+      nonce += global_work_size;
       // break;
     } else {
       log_debug("No work available. Z-z-z-z...");
@@ -313,8 +317,12 @@ monero_solver_new_cl(const struct monero_config_solver_cl *cfg)
   // init gpu
   assert(cfg->platform_id >= 0);
   assert(cfg->device_id >= 0);
+  assert(cfg->worksize >= 0);
+  assert(cfg->intensity >= 0);
   struct monero_solver_cl_context *cl = monero_solver_cl_context_init(
-      (cl_uint)cfg->platform_id, (cl_uint)cfg->device_id);
+      (cl_uint)cfg->platform_id, (cl_uint)cfg->device_id,
+      (size_t)cfg->intensity, (size_t)cfg->worksize);
+
   if (cl == NULL) {
     log_error("Error when initializing opencl device");
     return NULL;
@@ -352,7 +360,8 @@ monero_solver_new_cl(const struct monero_config_solver_cl *cfg)
 }
 
 struct monero_solver_cl_context *
-monero_solver_cl_context_init(cl_uint platform_id, cl_uint device_id)
+monero_solver_cl_context_init(cl_uint platform_id, cl_uint device_id,
+                              size_t intensity, size_t worksize)
 {
   // init cl context
   cl_int ret;
@@ -420,24 +429,27 @@ monero_solver_cl_context_init(cl_uint platform_id, cl_uint device_id)
     return NULL;
   }
 
-  struct monero_solver_cl_context *gpu =
+  struct monero_solver_cl_context *ctx =
       calloc(1, sizeof(struct monero_solver_cl_context));
-  gpu->cl_ctx = cl_ctx;
-  gpu->device_id = devices[device_id];
+  ctx->intensity = intensity;
+  ctx->worksize = worksize;
 
-  if (!monero_solver_cl_context_query_device(gpu)) {
+  ctx->cl_ctx = cl_ctx;
+  ctx->device_id = devices[device_id];
+
+  if (!monero_solver_cl_context_query_device(ctx)) {
     log_error("Failed to query OpenCL device capabilities");
-    monero_solver_cl_context_release(gpu);
+    monero_solver_cl_context_release(ctx);
     return NULL;
   }
 
-  if (!monero_solver_cl_context_prepare_kernel(gpu)) {
+  if (!monero_solver_cl_context_prepare_kernel(ctx)) {
     log_error("Failed initialize OpenCL solver kernel");
-    monero_solver_cl_context_release(gpu);
+    monero_solver_cl_context_release(ctx);
     return NULL;
   }
 
-  return gpu;
+  return ctx;
 }
 
 void monero_solver_cl_context_release(struct monero_solver_cl_context *ctx)
@@ -607,20 +619,22 @@ bool monero_solver_cl_context_prepare_kernel(
     return false;
   }
 
+  const size_t scratchpad_buffer_size = SCRATCHPAD_BUFFER_SIZE(ctx->intensity);
   log_debug("Allocating scratchpad buffer of %lu bytes",
-            SCRATCHPAD_BUFFER_SIZE);
+            scratchpad_buffer_size);
   ctx->scratchpad_buffer =
       clCreateBuffer(ctx->cl_ctx, CL_MEM_READ_WRITE | CL_MEM_HOST_NO_ACCESS,
-                     SCRATCHPAD_BUFFER_SIZE, NULL, &ret);
+                     scratchpad_buffer_size, NULL, &ret);
   if (ret != CL_SUCCESS) {
     log_error("Error when calling clCreateBuffer for scratchpad buffer of "
               "size(%lu): %s",
-              (size_t)SCRATCHPAD_BUFFER_SIZE, cl_err_str(ret));
+              scratchpad_buffer_size, cl_err_str(ret));
     return false;
   }
 
-  ctx->output_buffer = clCreateBuffer(ctx->cl_ctx, CL_MEM_WRITE_ONLY,
-                                      OUTPUT_BUFFER_SIZE, NULL, &ret);
+  ctx->output_buffer =
+      clCreateBuffer(ctx->cl_ctx, CL_MEM_WRITE_ONLY,
+                     OUTPUT_BUFFER_SIZE(ctx->intensity), NULL, &ret);
   if (ret != CL_SUCCESS) {
     log_error("Error when calling clCreateBuffer for output buffer: %s",
               cl_err_str(ret));

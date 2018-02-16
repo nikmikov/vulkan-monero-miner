@@ -24,6 +24,8 @@ struct monero_config_solver_cl {
   struct monero_config_solver solver;
   int platform_id;
   int device_id;
+  int intensity;
+  int worksize;
 };
 
 struct monero_config_solver_cuda {

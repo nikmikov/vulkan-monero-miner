@@ -78,13 +78,20 @@ monero_config_solver_cl_from_json(const cJSON *json)
     return NULL;
   }
 
-  int platform_id = -1;
-  int device_id = -1;
-  if (!json_get_int(json, "platform", &platform_id)) {
+  int platform_id = -1, device_id = -1, intensity = -1, worksize = -1;
+  if (!json_get_uint(json, "platform", &platform_id)) {
     return NULL;
   }
 
-  if (!json_get_int(json, "device", &device_id)) {
+  if (!json_get_uint(json, "device", &device_id)) {
+    return NULL;
+  }
+
+  if (!json_get_uint(json, "intensity", &intensity)) {
+    return NULL;
+  }
+
+  if (!json_get_uint(json, "worksize", &worksize)) {
     return NULL;
   }
 
@@ -92,6 +99,8 @@ monero_config_solver_cl_from_json(const cJSON *json)
       calloc(1, sizeof(struct monero_config_solver_cl));
   res->solver.solver_type = MONERO_CONFIG_SOLVER_CL;
   res->solver.affine_to_cpu = affinity;
+  res->intensity = intensity;
+  res->worksize = worksize;
   res->platform_id = platform_id;
   res->device_id = device_id;
   return &res->solver;

@@ -48,6 +48,20 @@ static inline int json_get_int(const cJSON *json, const char *field, int *out)
   return true;
 }
 
+static inline int json_get_uint(const cJSON *json, const char *field, int *out)
+{
+  int res = 0;
+  if (!json_get_int(json, field, &res)) {
+    return false;
+  }
+  if (res < 0) {
+    log_error("Field \"%s\" is a negative number", field);
+    return false;
+  }
+  *out = res;
+  return true;
+}
+
 /** Get a string field from json, return NULL if the field does not exists */
 static inline const char *json_get_string(const cJSON *json, const char *field)
 {
