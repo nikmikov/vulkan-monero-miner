@@ -202,9 +202,6 @@ bool monero_solver_init(const struct monero_config_solver *cfg,
   atomic_store(&solver->job_id, 0);
   atomic_store(&solver->is_alive, true);
   atomic_store(&solver->hashes_counter, 0);
-  //  solver->solver.work = monero_solver_work;
-  // solver->solver.free = monero_solver_free;
-  // solver->solver.get_metrics = monero_solver_get_metrics;
 
   uv_mutex_init(&solver->solution_lock);
   uv_async_init(uv_default_loop(), &solver->solution_found_async,

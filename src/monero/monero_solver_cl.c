@@ -77,12 +77,22 @@ bool monero_solver_cl_set_job(struct monero_solver *ptr,
   solver->output_nonces = output_nonces;
   solver->output_num = output_num;
 
+  uint8_t input_buffer[MONERO_INPUT_HASH_LEN];
+  memcpy(input_buffer, input_hash, input_hash_len);
+
+  // padding
+  if(input_hash_len < MONERO_INPUT_HASH_LEN) {
+    input_buffer[input_hash_len] = 0x01;
+    const size_t zero_from = input_hash_len + 1;
+    memset(input_buffer + zero_from, 0,  MONERO_INPUT_HASH_LEN - zero_from);
+  }
+
   cl_uint ret;
   struct monero_solver_cl_context *ctx = solver->cl;
   assert(ctx != NULL);
   // INPUT BUFFER DATA
   ret = clEnqueueWriteBuffer(ctx->command_queue, ctx->input_buffer, CL_TRUE, 0,
-                             input_hash_len, input_hash, 0, NULL, NULL);
+                             INPUT_BUFFER_SIZE, input_buffer, 0, NULL, NULL);
 
   if (ret != CL_SUCCESS) {
     log_error("Error when calling clEnqueueWriteBuffer with input data: %s",
