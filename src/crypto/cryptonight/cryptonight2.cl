@@ -276,7 +276,6 @@ static inline void aes_round(uint4 key, uint4 *x0, uint4 *x1, uint4 *x2,
 
 static inline void explode_scratchpad(uint *state, global uint *scratchpad)
 {
-  uint4 xin0, xin1, xin2, xin3, xin4, xin5, xin6, xin7;
   uint4 k0, k1, k2, k3, k4, k5, k6, k7, k8, k9;
 
   // bytes 0..31 of the Keccak final state are
@@ -286,37 +285,24 @@ static inline void explode_scratchpad(uint *state, global uint *scratchpad)
   // The bytes 64..191
   // are extracted from the Keccak final state and split into 8 blocks of
   // 16 bytes each.
-  xin0 = vload4(4, state);
-  xin1 = vload4(5, state);
-  xin2 = vload4(6, state);
-  xin3 = vload4(7, state);
-  xin4 = vload4(8, state);
-  xin5 = vload4(9, state);
-  xin6 = vload4(10, state);
-  xin7 = vload4(11, state);
 
   // Each block is encrypted using the following procedure
   // `block = aes_round(block, round_keys[i])`
-  for (size_t i = 0; i < CRYPTONIGHT_MEMORY_UINT4; i += 8) {
-    aes_round(k0, &xin0, &xin1, &xin2, &xin3, &xin4, &xin5, &xin6, &xin7);
-    aes_round(k1, &xin0, &xin1, &xin2, &xin3, &xin4, &xin5, &xin6, &xin7);
-    aes_round(k2, &xin0, &xin1, &xin2, &xin3, &xin4, &xin5, &xin6, &xin7);
-    aes_round(k3, &xin0, &xin1, &xin2, &xin3, &xin4, &xin5, &xin6, &xin7);
-    aes_round(k4, &xin0, &xin1, &xin2, &xin3, &xin4, &xin5, &xin6, &xin7);
-    aes_round(k5, &xin0, &xin1, &xin2, &xin3, &xin4, &xin5, &xin6, &xin7);
-    aes_round(k6, &xin0, &xin1, &xin2, &xin3, &xin4, &xin5, &xin6, &xin7);
-    aes_round(k7, &xin0, &xin1, &xin2, &xin3, &xin4, &xin5, &xin6, &xin7);
-    aes_round(k8, &xin0, &xin1, &xin2, &xin3, &xin4, &xin5, &xin6, &xin7);
-    aes_round(k9, &xin0, &xin1, &xin2, &xin3, &xin4, &xin5, &xin6, &xin7);
-
-    vstore4(xin0, i + 0, scratchpad);
-    vstore4(xin1, i + 1, scratchpad);
-    vstore4(xin2, i + 2, scratchpad);
-    vstore4(xin3, i + 3, scratchpad);
-    vstore4(xin4, i + 4, scratchpad);
-    vstore4(xin5, i + 5, scratchpad);
-    vstore4(xin6, i + 6, scratchpad);
-    vstore4(xin7, i + 7, scratchpad);
+  for(size_t b = 0; b < 8; ++b) {
+    uint4 xin = vload4(4 + b, state);;
+    for (size_t i = b; i < CRYPTONIGHT_MEMORY_UINT4; i += 8) {
+      xin = aes_encode(xin, k0);
+      xin = aes_encode(xin, k1);
+      xin = aes_encode(xin, k2);
+      xin = aes_encode(xin, k3);
+      xin = aes_encode(xin, k4);
+      xin = aes_encode(xin, k5);
+      xin = aes_encode(xin, k6);
+      xin = aes_encode(xin, k7);
+      xin = aes_encode(xin, k8);
+      xin = aes_encode(xin, k9);
+      vstore4(xin, i, scratchpad);
+    }
   }
 }
 
@@ -386,49 +372,24 @@ static inline void implode_scratchpad(uint *state, global uint *scratchpad)
   // but using the new keys. The
   // result is XORed with the first 128 bytes from the scratchpad,
   // encrypted again, and so on.
-  for (size_t i = 0; i < CRYPTONIGHT_MEMORY_UINT4; i += 8) {
-
-    xout0 ^= vload4(i + 0, scratchpad);
-    xout1 ^= vload4(i + 1, scratchpad);
-    xout2 ^= vload4(i + 2, scratchpad);
-    xout3 ^= vload4(i + 3, scratchpad);
-    xout4 ^= vload4(i + 4, scratchpad);
-    xout5 ^= vload4(i + 5, scratchpad);
-    xout6 ^= vload4(i + 6, scratchpad);
-    xout7 ^= vload4(i + 7, scratchpad);
-
-    aes_round(k0, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
-              &xout7);
-    aes_round(k1, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
-              &xout7);
-    aes_round(k2, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
-              &xout7);
-    aes_round(k3, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
-              &xout7);
-    aes_round(k4, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
-              &xout7);
-    aes_round(k5, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
-              &xout7);
-    aes_round(k6, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
-              &xout7);
-    aes_round(k7, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
-              &xout7);
-    aes_round(k8, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
-              &xout7);
-    aes_round(k9, &xout0, &xout1, &xout2, &xout3, &xout4, &xout5, &xout6,
-              &xout7);
+  for (size_t b = 0; b < 8; ++b) {
+    uint4 xout = vload4(4 + b, state);
+    for (size_t i = b; i < CRYPTONIGHT_MEMORY_UINT4; i += 8) {
+      xout ^= vload4(i, scratchpad);
+      xout = aes_encode(xout, k0);
+      xout = aes_encode(xout, k1);
+      xout = aes_encode(xout, k2);
+      xout = aes_encode(xout, k3);
+      xout = aes_encode(xout, k4);
+      xout = aes_encode(xout, k5);
+      xout = aes_encode(xout, k6);
+      xout = aes_encode(xout, k7);
+      xout = aes_encode(xout, k8);
+      xout = aes_encode(xout, k9);
+    }
+    vstore4(xout, 4 + b, state);
   }
 
-  // then the bytes 64..191 in the Keccak state
-  // are replaced with the result
-  vstore4(xout0, 4, state);
-  vstore4(xout1, 5, state);
-  vstore4(xout2, 6, state);
-  vstore4(xout3, 7, state);
-  vstore4(xout4, 8, state);
-  vstore4(xout5, 9, state);
-  vstore4(xout6, 10, state);
-  vstore4(xout7, 11, state);
 }
 
 #define INPUT_SIZE_ULONG                                                       \
