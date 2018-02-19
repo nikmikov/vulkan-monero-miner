@@ -7,17 +7,19 @@
 
 #include "utils/hex.h"
 
+#define HASH_LEN 84
+
 struct monero_job *monero_job_gen_random()
 {
-  static const size_t blob_int_blocks = 1 + MONERO_INPUT_HASH_LEN / sizeof(int);
+  static const size_t blob_int_blocks = 1 + HASH_LEN / sizeof(int);
 
   int *blob = calloc(blob_int_blocks, sizeof(int));
   int *p = blob;
   for (size_t i = 0; i < blob_int_blocks; ++i, ++p) {
     *p = rand();
   }
-  char buf[1 + MONERO_INPUT_HASH_LEN * 2] = {0};
-  hex_from_binary(blob, MONERO_INPUT_HASH_LEN, buf);
+  char buf[1 + HASH_LEN * 2] = {0};
+  hex_from_binary(blob, HASH_LEN, buf);
 
   free(blob);
   struct monero_job *job = calloc(1, sizeof(struct monero_job));

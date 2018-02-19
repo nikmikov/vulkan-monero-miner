@@ -492,9 +492,9 @@ kernel void cryptonight(global ulong *input, global uint *scratchpad_begin,
   keccakf1600(hash_state);
 
   // copy to output
-  const size_t offs = work_id * HASH_STATE_SIZE_ULONG;
-  for (size_t i = offs; i < offs + HASH_STATE_SIZE_ULONG; ++i) {
-    output[i] = hash_state[i];
+  global ulong *work_output = output + work_id * HASH_STATE_SIZE_ULONG;
+  for (size_t i = 0; i < HASH_STATE_SIZE_ULONG; ++i) {
+    work_output[i] = hash_state[i];
   }
 }
 )==="

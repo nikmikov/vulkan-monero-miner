@@ -12,10 +12,16 @@
 #include "utils/opencl_err.h"
 #include "utils/port_sleep.h"
 
+#include "crypto/blake.h"
+#include "crypto/cryptonight/cryptonight.h"
+#include "crypto/groestl.h"
+#include "crypto/jh.h"
+#include "crypto/skein.h"
+
 #define INPUT_BUFFER_SIZE MONERO_INPUT_HASH_LEN
 #define SCRATCHPAD_BUFFER_SIZE(threads)                                        \
   ((size_t)threads * MONERO_CRYPTONIGHT_MEMORY)
-#define OUTPUT_BUFFER_SIZE(threads) ((size_t)threads * 1600)
+#define OUTPUT_BUFFER_SIZE(threads) ((size_t)threads * 200)
 
 struct monero_solver_cl_context {
   /** Config options */
@@ -60,10 +66,16 @@ struct monero_solver_cl {
   /** output buffer */
   uint8_t *output_buffer;
 
+  const uint8_t *input_hash;
+  size_t input_hash_len;
   uint64_t target;
   uint8_t *output_hash;
   uint32_t *output_nonces;
   size_t *output_num;
+
+  /** cryptonight context */
+  struct cryptonight_ctx *cryptonight_ctx;
+  struct cryptonight_hash cryptonight_output_hash;
 };
 
 bool monero_solver_cl_set_job(struct monero_solver *ptr,
@@ -71,20 +83,25 @@ bool monero_solver_cl_set_job(struct monero_solver *ptr,
                               const uint64_t target, uint8_t *output_hash,
                               uint32_t *output_nonces, size_t *output_num)
 {
+  if (input_hash_len > 84) {
+    return false;
+  }
   struct monero_solver_cl *solver = (struct monero_solver_cl *)ptr;
+  solver->input_hash = input_hash;
+  solver->input_hash_len = input_hash_len;
   solver->target = target;
   solver->output_hash = output_hash;
   solver->output_nonces = output_nonces;
   solver->output_num = output_num;
 
-  uint8_t input_buffer[MONERO_INPUT_HASH_LEN];
+  uint8_t input_buffer[INPUT_BUFFER_SIZE];
   memcpy(input_buffer, input_hash, input_hash_len);
 
   // padding
-  if(input_hash_len < MONERO_INPUT_HASH_LEN) {
-    input_buffer[input_hash_len] = 0x01;
+  if (input_hash_len < MONERO_INPUT_HASH_LEN) {
     const size_t zero_from = input_hash_len + 1;
-    memset(input_buffer + zero_from, 0,  MONERO_INPUT_HASH_LEN - zero_from);
+    memset(input_buffer + zero_from, 0, MONERO_INPUT_HASH_LEN - zero_from);
+    input_buffer[input_hash_len] = 0x01;
   }
 
   cl_uint ret;
@@ -131,6 +148,15 @@ bool monero_solver_cl_set_job(struct monero_solver *ptr,
   return true;
 }
 
+static inline void print_debug(const char *s, uint8_t *mem, size_t N)
+{
+  printf("CPU: %s", s);
+  for (size_t i = 0; i < N; ++i) {
+    printf("%02hhx", mem[i]);
+  }
+  printf("\n");
+}
+
 // *output_hash: SOLUTIONS_BUFFER_SIZE * MONERO_OUTPUT_HASH_LEN
 int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from)
 {
@@ -162,7 +188,47 @@ int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from)
               cl_err_str(ret));
     return -1;
   }
-  *solver->output_num = 0; // TODO: process results
+
+  static void (*const extra_hashes[4])(const void *, size_t, uint8_t *) = {
+      blake_256, groestl_256, jh_256, skein_512_256};
+
+  static const size_t OUT_SZ = 200;
+  uint8_t output[256];
+  *solver->output_num = 0;
+
+  for (size_t i = 0; i < global_work_size; ++i) {
+    uint8_t *hash_state = solver->output_buffer + i * OUT_SZ;
+    const int final_hash_idx = hash_state[0] & 3;
+    extra_hashes[final_hash_idx](hash_state, OUT_SZ * 8, (uint8_t *)output);
+
+    if (monero_solution_hash_val(output) < solver->target) {
+      uint32_t nonce = nonce_from + (uint32_t)i;
+      log_debug("Solution found: %x!", nonce);
+      // solution found
+      memcpy(solver->output_hash, output, MONERO_OUTPUT_HASH_LEN);
+      (*solver->output_nonces++) = nonce;
+      ++(*solver->output_num);
+    }
+
+    // compare against CPU version
+#ifdef __VERIFY_CL_
+    log_debug("Verifying results");
+    printf("+++: %d\n", final_hash_idx);
+    *(uint32_t *)&solver->input_hash[MONERO_NONCE_POSITION] = nonce_from + i;
+    cryptonight_aesni(solver->input_hash, solver->input_hash_len,
+                      &solver->cryptonight_output_hash,
+                      solver->cryptonight_ctx);
+    print_debug("FINAL HASH CL:: ", output, 32);
+    print_debug("FINAL HASH CPU: ", &solver->cryptonight_output_hash, 32);
+    if (memcmp(output, &solver->cryptonight_output_hash, 32) != 0) {
+      log_error("Don't match: %lu", i);
+      exit(1);
+    } else {
+      log_info("Match: %lu", i);
+    }
+#endif
+  }
+
   return (int)global_work_size;
 }
 
@@ -199,6 +265,8 @@ monero_solver_new_cl(const struct monero_config_solver_cl *cfg)
 
   struct monero_solver_cl *solver_cl =
       calloc(1, sizeof(struct monero_solver_cl));
+
+  solver_cl->cryptonight_ctx = cryptonight_ctx_new();
 
   solver_cl->output_buffer = calloc(1, OUTPUT_BUFFER_SIZE(cfg->intensity));
 
