@@ -199,7 +199,7 @@ int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from)
   for (size_t i = 0; i < global_work_size; ++i) {
     uint8_t *hash_state = solver->output_buffer + i * OUT_SZ;
     const int final_hash_idx = hash_state[0] & 3;
-    extra_hashes[final_hash_idx](hash_state, OUT_SZ * 8, (uint8_t *)output);
+    extra_hashes[final_hash_idx](hash_state, OUT_SZ * 8, output);
 
     if (monero_solution_hash_val(output) < solver->target) {
       uint32_t nonce = nonce_from + (uint32_t)i;
@@ -211,6 +211,7 @@ int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from)
     }
 
     // compare against CPU version
+    //#define  __VERIFY_CL_
 #ifdef __VERIFY_CL_
     log_debug("Verifying results");
     printf("+++: %d\n", final_hash_idx);

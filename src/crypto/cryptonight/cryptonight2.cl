@@ -102,7 +102,7 @@ static const constant uint aes_table[4][256] = {
 
 static const constant uint aes_sbox[256] = aes_data(aes_h0);
 
-static inline void keccakf1600(ulong *st)
+static inline void keccakf1600(global ulong *st)
 {
   int i, round;
   ulong t, bc[5];
@@ -213,7 +213,7 @@ static inline uint4 sl_xor(uint4 a)
     k1 = sl_xor(k1) ^ aes_keygenassist(k0, 0x00).s2;                           \
   }
 
-static inline void aes_genkey(const uint *memory, uint4 *k0, uint4 *k1,
+static inline void aes_genkey(global const uint *memory, uint4 *k0, uint4 *k1,
                               uint4 *k2, uint4 *k3, uint4 *k4, uint4 *k5,
                               uint4 *k6, uint4 *k7, uint4 *k8, uint4 *k9)
 {
@@ -274,7 +274,7 @@ static inline void aes_round(uint4 key, uint4 *x0, uint4 *x1, uint4 *x2,
   *x7 = aes_encode(*x7, key);
 }
 
-static inline void explode_scratchpad(uint *state, global uint *scratchpad)
+static inline void explode_scratchpad(global uint *state, global uint *scratchpad)
 {
   uint4 k0, k1, k2, k3, k4, k5, k6, k7, k8, k9;
 
@@ -349,7 +349,7 @@ static inline void memory_hard_loop(ulong4 k, global uint *scratchpad)
   }
 }
 
-static inline void implode_scratchpad(uint *state, global uint *scratchpad)
+static inline void implode_scratchpad(global uint *state, global uint *scratchpad)
 {
   uint4 xout0, xout1, xout2, xout3, xout4, xout5, xout6, xout7;
   uint4 k0, k1, k2, k3, k4, k5, k6, k7, k8, k9;
@@ -396,9 +396,9 @@ static inline void implode_scratchpad(uint *state, global uint *scratchpad)
   (INPUT_HASH_SIZE / sizeof(ulong)) /* 11x8 == 88 bytes */
 #define HASH_STATE_SIZE_ULONG (HASH_STATE_SIZE / sizeof(ulong))
 
-static inline void hash_state_init_with_nonce(global ulong *input,
+static inline void hash_state_init_with_nonce(global const ulong *input,
                                               const uint nonce,
-                                              ulong *hash_state)
+                                              global ulong *hash_state)
 {
   for (size_t i = 0; i < INPUT_SIZE_ULONG; ++i) {
     hash_state[i] = input[i];
@@ -419,13 +419,15 @@ static inline void hash_state_init_with_nonce(global ulong *input,
 }
 
 // input always 11x8 byte elements (88 bytes)
-kernel void cryptonight(global ulong *input, global uint *scratchpad_begin,
+kernel void cryptonight(global const ulong *input,
+                        global uint *scratchpad_begin,
                         global ulong *output)
 {
   const size_t work_id = get_global_id(0) - get_global_offset(0);
+
   global uint *scratchpad =
       scratchpad_begin + work_id * CRYPTONIGHT_MEMORY_UINT;
-  ulong hash_state[HASH_STATE_SIZE_ULONG];
+  global ulong *hash_state = output + work_id * HASH_STATE_SIZE_ULONG;
 
   uint nonce = get_global_id(0);
 
@@ -436,7 +438,7 @@ kernel void cryptonight(global ulong *input, global uint *scratchpad_begin,
   keccakf1600(hash_state);
 
   // init scratchpad
-  explode_scratchpad((uint *)hash_state, scratchpad);
+  explode_scratchpad((global uint *)hash_state, scratchpad);
 
   // Bytes 0..31 and 32..63 of the Keccak state
   // are XORed, and the resulting 32 bytes are used to initialize
@@ -447,15 +449,9 @@ kernel void cryptonight(global ulong *input, global uint *scratchpad_begin,
   memory_hard_loop(x0, scratchpad);
 
   // implode scratchpad
-  implode_scratchpad((uint *)hash_state, scratchpad);
+  implode_scratchpad((global uint *)hash_state, scratchpad);
 
   // keccak of 24 bytes of final hash
   keccakf1600(hash_state);
-
-  // copy to output
-  global ulong *work_output = output + work_id * HASH_STATE_SIZE_ULONG;
-  for (size_t i = 0; i < HASH_STATE_SIZE_ULONG; ++i) {
-    work_output[i] = hash_state[i];
-  }
 }
 )==="
