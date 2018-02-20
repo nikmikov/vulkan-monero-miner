@@ -2,6 +2,7 @@
 
 #include "logging.h"
 #include <assert.h>
+#include <string.h>
 #include <uv.h>
 
 #include "monero.h"
