@@ -97,10 +97,8 @@ static const constant ulong keccakf_rndc[24] = {
 #define aes_u2(p) aes_b2w(p, aes_f3(p), aes_f2(p), p)
 #define aes_u3(p) aes_b2w(p, p, aes_f3(p), aes_f2(p))
 
-static const constant uint aes_table[4][256] = {
-    aes_data(aes_u0), aes_data(aes_u1), aes_data(aes_u2), aes_data(aes_u3)};
-
 static const constant uint aes_sbox[256] = aes_data(aes_h0);
+static const constant uint aes_const[256] = aes_data(aes_u0);
 
 static inline void keccakf1600(global ulong *st)
 {
@@ -433,7 +431,7 @@ kernel void cryptonight(global const ulong *input,
 
   local uint AES0[256], AES1[256], AES2[256], AES3[256];
   for (size_t i = get_local_id(0) ; i < 256; i += get_local_size(0)) {
-      const uint tmp = aes_table[0][i];
+      const uint tmp = aes_const[i];
       AES0[i] = tmp;
       AES1[i] = rotate(tmp, 8U);
       AES2[i] = rotate(tmp, 16U);
