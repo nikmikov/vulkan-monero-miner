@@ -107,7 +107,6 @@ static inline void keccakf1600(global ulong *st)
   int i, round;
   ulong t, bc[5];
 
-#pragma unroll 1
   for (round = 0; round < 24; ++round) {
     // Theta
     bc[0] = st[0] ^ st[5] ^ st[10] ^ st[15] ^ st[20] ^
@@ -153,14 +152,13 @@ static inline void keccakf1600(global ulong *st)
 
     // Rho Pi
     t = st[1];
-#pragma unroll
+
     for (i = 0; i < 24; ++i) {
       bc[0] = st[keccakf_piln[i]];
       st[keccakf_piln[i]] = rotate(t, (ulong)keccakf_rotc[i]);
       t = bc[0];
     }
 
-#pragma unroll
     for (int i = 0; i < 25; i += 5) {
       ulong tmp1 = st[i], tmp2 = st[i + 1];
 
@@ -187,59 +185,48 @@ static inline uint sub_word(uint key)
          (aes_sbox[BYTE1(key)] << 8) | aes_sbox[BYTE0(key)];
 }
 
-#define ROTR8(x) ((x >> 8) | (x << (32 - 8)))
-
-static inline uint4 aes_keygenassist(uint4 key, uint rcon)
+static inline void aes_genkey(global const uint *memory, uint *k)
 {
-  uint X1 = sub_word(key.s1);
-  uint X3 = sub_word(key.s3);
-  uint4 res = {X1, ROTR8(X1) ^ rcon, X3, ROTR8(X3) ^ rcon};
-  return res;
-}
+  // load first 32 bytes
+  for(size_t i = 0; i < 8; ++i) {
+    k[i] = memory[i];
+  }
 
-// This will shift and xor var into itself as 4 32-bit vals such as
-// sl_xor(a1 a2 a3 a4) = a1 (a2^a1) (a3^a2^a1) (a4^a3^a2^a1)
-static inline uint4 sl_xor(uint4 a)
-{
-  a.s1 ^= a.s0;
-  a.s2 ^= a.s1;
-  a.s3 ^= a.s2;
-  return a;
-}
+  for (uint c = 8; c < 40; ++c) {
+    // For 256-bit keys, an sbox permutation is done every other 4th uint
+    // generated, AND every 8th
+    uint t = select(sub_word(k[c - 1]), k[c - 1], c & 3);
 
-static inline void aes_genkey(global const uint *memory, uint4 *k)
-{
-  k[0] = vload4(0, memory);
-  k[1] = vload4(1, memory);
-
-  uint rcon = 0x01;
-  for (size_t i = 2; i < 10; i += 2, rcon <<= 1) {
-    k[i]   = sl_xor(k[i-2]) ^ aes_keygenassist(k[i-1], rcon).s3;
-    k[i+1] = sl_xor(k[i-1]) ^ aes_keygenassist(k[i], 0x00).s2;
+    // If the uint we're generating has an index that is a multiple of 8, rotate
+    // and XOR with the round constant, then XOR this with previously generated
+    // uint. If it's 4 after a multiple of 8, only the sbox permutation is done,
+    // followed by the XOR. If neither are true, only the XOR with the
+    // previously generated uint is done.
+    k[c] = k[c - 8] ^ select(rotate(t, 24U) ^ (1 << ((c >> 3) - 1)), t, c & 7);
   }
 }
 
 // AES-encode 16-bytes block `b`, using key `k`
 static inline uint aes_encode(const local uint *AES0, const local uint *AES1,
                               const local uint *AES2, const local uint *AES3,
-                              const uint4 k, uint *b)
+                              const uint* k, uint *b)
 {
   uint i0 = b[0];
   uint i1 = b[1];
   uint i2 = b[2];
   uint i3 = b[3];
 
-  b[0] = AES0[BYTE0(i0)] ^ AES1[BYTE1(i1)] ^ AES2[BYTE2(i2)] ^ AES3[BYTE3(i3)] ^ k.s0;
-  b[1] = AES0[BYTE0(i1)] ^ AES1[BYTE1(i2)] ^ AES2[BYTE2(i3)] ^ AES3[BYTE3(i0)] ^ k.s1;
-  b[2] = AES0[BYTE0(i2)] ^ AES1[BYTE1(i3)] ^ AES2[BYTE2(i0)] ^ AES3[BYTE3(i1)] ^ k.s2;
-  b[3] = AES0[BYTE0(i3)] ^ AES1[BYTE1(i0)] ^ AES2[BYTE2(i1)] ^ AES3[BYTE3(i2)] ^ k.s3;
+  b[0] = AES0[BYTE0(i0)] ^ AES1[BYTE1(i1)] ^ AES2[BYTE2(i2)] ^ AES3[BYTE3(i3)] ^ k[0];
+  b[1] = AES0[BYTE0(i1)] ^ AES1[BYTE1(i2)] ^ AES2[BYTE2(i3)] ^ AES3[BYTE3(i0)] ^ k[1];
+  b[2] = AES0[BYTE0(i2)] ^ AES1[BYTE1(i3)] ^ AES2[BYTE2(i0)] ^ AES3[BYTE3(i1)] ^ k[2];
+  b[3] = AES0[BYTE0(i3)] ^ AES1[BYTE1(i0)] ^ AES2[BYTE2(i1)] ^ AES3[BYTE3(i2)] ^ k[3];
 }
 
 static inline void explode_scratchpad(const local uint *AES0, const local uint *AES1,
                                       const local uint *AES2, const local uint *AES3,
                                       global uint *state, global uint *scratchpad)
 {
-  uint4 k[10];
+  uint k[40];
 
   // bytes 0..31 of the Keccak final state are
   // interpreted as an AES-256 key and expanded to 10 round keys.
@@ -260,8 +247,8 @@ static inline void explode_scratchpad(const local uint *AES0, const local uint *
     xin[3] =  state[offs + 3];
 
     for (size_t i = b; i < CRYPTONIGHT_MEMORY_UINT4; i += 8) {
-      for(size_t j = 0; j < 10; ++j) {
-        aes_encode(AES0, AES1, AES2, AES3, k[j], xin);
+      for(size_t j = 0; j < 40; j += 4) {
+        aes_encode(AES0, AES1, AES2, AES3, k + j, xin);
       }
       offs = i << 2;
       scratchpad[offs + 0] = xin[0];
@@ -293,7 +280,7 @@ static inline void memory_hard_loop(const local uint *AES0, const local uint *AE
     cx[1] = scratchpad[idx_a + 1];
     cx[2] = scratchpad[idx_a + 2];
     cx[3] = scratchpad[idx_a + 3];
-    aes_encode(AES0, AES1, AES2, AES3, *(uint4*)(X32), cx);
+    aes_encode(AES0, AES1, AES2, AES3, X32, cx);
 
     // b, scratchpad[addr] = scratchpad[addr], b ^ scratchpad[addr]
     scratchpad[idx_a + 0] = cx[0] ^ X32[4];
@@ -337,7 +324,7 @@ static inline void implode_scratchpad(const local uint *AES0, const local uint *
                                      const local uint *AES2, const local uint *AES3,
                                      global uint *state, global uint *scratchpad)
 {
-  uint4 k[10];
+  uint k[40];
   // bytes 32..63 of the Keccak final state are
   // interpreted as an AES-256 key and expanded to 10 round keys.
   aes_genkey(state + 8, k);
@@ -362,8 +349,8 @@ static inline void implode_scratchpad(const local uint *AES0, const local uint *
       xout[1] ^= scratchpad[offs + 1];
       xout[2] ^= scratchpad[offs + 2];
       xout[3] ^= scratchpad[offs + 3];
-      for(size_t j = 0; j < 10; ++j) {
-        aes_encode(AES0, AES1, AES2, AES3, k[j], xout);
+      for(size_t j = 0; j < 40; j += 4) {
+        aes_encode(AES0, AES1, AES2, AES3, k + j, xout);
       }
     }
     offs = (4 + b) << 2;
