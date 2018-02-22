@@ -207,38 +207,16 @@ static inline uint4 sl_xor(uint4 a)
   return a;
 }
 
-#define AES_GENKEY_SUB(rcon, k0, k1)                                           \
-  {                                                                            \
-    k0 = sl_xor(k0) ^ aes_keygenassist(k1, rcon).s3;                           \
-    k1 = sl_xor(k1) ^ aes_keygenassist(k0, 0x00).s2;                           \
-  }
-
-static inline void aes_genkey(global const uint *memory, uint4 *k0, uint4 *k1,
-                              uint4 *k2, uint4 *k3, uint4 *k4, uint4 *k5,
-                              uint4 *k6, uint4 *k7, uint4 *k8, uint4 *k9)
+static inline void aes_genkey(global const uint *memory, uint4 *k)
 {
-  uint4 xout0, xout2;
+  k[0] = vload4(0, memory);
+  k[1] = vload4(1, memory);
 
-  xout0 = vload4(0, memory);
-  xout2 = vload4(1, memory);
-  *k0 = xout0;
-  *k1 = xout2;
-
-  AES_GENKEY_SUB(0x01, xout0, xout2);
-  *k2 = xout0;
-  *k3 = xout2;
-
-  AES_GENKEY_SUB(0x02, xout0, xout2);
-  *k4 = xout0;
-  *k5 = xout2;
-
-  AES_GENKEY_SUB(0x04, xout0, xout2);
-  *k6 = xout0;
-  *k7 = xout2;
-
-  AES_GENKEY_SUB(0x08, xout0, xout2);
-  *k8 = xout0;
-  *k9 = xout2;
+  uint rcon = 0x01;
+  for (size_t i = 2; i < 10; i += 2, rcon <<= 1) {
+    k[i]   = sl_xor(k[i-2]) ^ aes_keygenassist(k[i-1], rcon).s3;
+    k[i+1] = sl_xor(k[i-1]) ^ aes_keygenassist(k[i], 0x00).s2;
+  }
 }
 
 // clang-format off
@@ -266,11 +244,11 @@ static inline void explode_scratchpad(const local uint *AES0, const local uint *
                                       const local uint *AES2, const local uint *AES3,
                                       global uint *state, global uint *scratchpad)
 {
-  uint4 k0, k1, k2, k3, k4, k5, k6, k7, k8, k9;
+  uint4 k[10];
 
   // bytes 0..31 of the Keccak final state are
   // interpreted as an AES-256 key and expanded to 10 round keys.
-  aes_genkey(state, &k0, &k1, &k2, &k3, &k4, &k5, &k6, &k7, &k8, &k9);
+  aes_genkey(state, k);
 
   // The bytes 64..191
   // are extracted from the Keccak final state and split into 8 blocks of
@@ -281,16 +259,9 @@ static inline void explode_scratchpad(const local uint *AES0, const local uint *
   for(size_t b = 0; b < 8; ++b) {
     uint4 xin = vload4(4 + b, state);;
     for (size_t i = b; i < CRYPTONIGHT_MEMORY_UINT4; i += 8) {
-      xin = aes_encode(AES0, AES1, AES2, AES3, xin, k0);
-      xin = aes_encode(AES0, AES1, AES2, AES3, xin, k1);
-      xin = aes_encode(AES0, AES1, AES2, AES3, xin, k2);
-      xin = aes_encode(AES0, AES1, AES2, AES3, xin, k3);
-      xin = aes_encode(AES0, AES1, AES2, AES3, xin, k4);
-      xin = aes_encode(AES0, AES1, AES2, AES3, xin, k5);
-      xin = aes_encode(AES0, AES1, AES2, AES3, xin, k6);
-      xin = aes_encode(AES0, AES1, AES2, AES3, xin, k7);
-      xin = aes_encode(AES0, AES1, AES2, AES3, xin, k8);
-      xin = aes_encode(AES0, AES1, AES2, AES3, xin, k9);
+      for(size_t j = 0; j < 10; ++j) {
+        xin = aes_encode(AES0, AES1, AES2, AES3, xin, k[j]);
+      }
       vstore4(xin, i, scratchpad);
     }
   }
@@ -314,7 +285,7 @@ static inline void memory_hard_loop(const local uint *AES0, const local uint *AE
       ulong a0, a1, b0, b1;
     };
   } X = {.v = k};
-
+#pragma unroll 4
   for (size_t i = 0; i < CRYPTONIGHT_ITERATIONS; ++i) {
     // addr = to_scratchpad_address(a)
     const size_t idx_a = to_scratchpad_address(X.a0);
@@ -345,21 +316,10 @@ static inline void implode_scratchpad(const local uint *AES0, const local uint *
                                      const local uint *AES2, const local uint *AES3,
                                      global uint *state, global uint *scratchpad)
 {
-  uint4 xout0, xout1, xout2, xout3, xout4, xout5, xout6, xout7;
-  uint4 k0, k1, k2, k3, k4, k5, k6, k7, k8, k9;
+  uint4 k[10];
   // bytes 32..63 of the Keccak final state are
   // interpreted as an AES-256 key and expanded to 10 round keys.
-  aes_genkey(state + 8, &k0, &k1, &k2, &k3, &k4, &k5, &k6, &k7, &k8, &k9);
-
-  // Bytes 64..191 are extracted from the Keccak state
-  xout0 = vload4(4, state);
-  xout1 = vload4(5, state);
-  xout2 = vload4(6, state);
-  xout3 = vload4(7, state);
-  xout4 = vload4(8, state);
-  xout5 = vload4(9, state);
-  xout6 = vload4(10, state);
-  xout7 = vload4(11, state);
+  aes_genkey(state + 8, k);
 
   // Then the result is encrypted in
   // the same manner as in the `explode_scratchpad`,
@@ -367,23 +327,16 @@ static inline void implode_scratchpad(const local uint *AES0, const local uint *
   // result is XORed with the first 128 bytes from the scratchpad,
   // encrypted again, and so on.
   for (size_t b = 0; b < 8; ++b) {
+    // Bytes 64..191 are extracted from the Keccak state
     uint4 xout = vload4(4 + b, state);
     for (size_t i = b; i < CRYPTONIGHT_MEMORY_UINT4; i += 8) {
       xout ^= vload4(i, scratchpad);
-      xout = aes_encode(AES0, AES1, AES2, AES3, xout, k0);
-      xout = aes_encode(AES0, AES1, AES2, AES3, xout, k1);
-      xout = aes_encode(AES0, AES1, AES2, AES3, xout, k2);
-      xout = aes_encode(AES0, AES1, AES2, AES3, xout, k3);
-      xout = aes_encode(AES0, AES1, AES2, AES3, xout, k4);
-      xout = aes_encode(AES0, AES1, AES2, AES3, xout, k5);
-      xout = aes_encode(AES0, AES1, AES2, AES3, xout, k6);
-      xout = aes_encode(AES0, AES1, AES2, AES3, xout, k7);
-      xout = aes_encode(AES0, AES1, AES2, AES3, xout, k8);
-      xout = aes_encode(AES0, AES1, AES2, AES3, xout, k9);
+      for(size_t j = 0; j < 10; ++j) {
+        xout = aes_encode(AES0, AES1, AES2, AES3, xout, k[j]);
+      }
     }
     vstore4(xout, 4 + b, state);
   }
-
 }
 
 #define INPUT_SIZE_ULONG                                                       \
