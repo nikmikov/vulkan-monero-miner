@@ -327,6 +327,7 @@ static inline void implode_scratchpad(const local uint *AES0, const local uint *
                                       const local uint *AES2, const local uint *AES3,
                                       global uint *state, global uint *scratchpad)
 {
+  size_t b = get_global_id(1);
   uint k[40];
   // bytes 32..63 of the Keccak final state are
   // interpreted as an AES-256 key and expanded to 10 round keys.
@@ -337,31 +338,30 @@ static inline void implode_scratchpad(const local uint *AES0, const local uint *
   // but using the new keys. The
   // result is XORed with the first 128 bytes from the scratchpad,
   // encrypted again, and so on.
-  for (size_t b = 0; b < 8; ++b) {
-    // Bytes 64..191 are extracted from the Keccak state
-    uint xout[4];
-    uint offs = (4 + b) << 2;
-    xout[0] = state[offs + 0];
-    xout[1] = state[offs + 1];
-    xout[2] = state[offs + 2];
-    xout[3] = state[offs + 3];
 
-    for (size_t i = b; i < CRYPTONIGHT_MEMORY_UINT4; i += 8) {
-      offs = i << 2;
-      xout[0] ^= scratchpad[offs + 0];
-      xout[1] ^= scratchpad[offs + 1];
-      xout[2] ^= scratchpad[offs + 2];
-      xout[3] ^= scratchpad[offs + 3];
-      for(size_t j = 0; j < 40; j += 4) {
-        aes_encode(AES0, AES1, AES2, AES3, k + j, xout);
-      }
+  // Bytes 64..191 are extracted from the Keccak state
+  uint xout[4];
+  uint offs = (4 + b) << 2;
+  xout[0] = state[offs + 0];
+  xout[1] = state[offs + 1];
+  xout[2] = state[offs + 2];
+  xout[3] = state[offs + 3];
+
+  for (size_t i = b; i < CRYPTONIGHT_MEMORY_UINT4; i += 8) {
+    offs = i << 2;
+    xout[0] ^= scratchpad[offs + 0];
+    xout[1] ^= scratchpad[offs + 1];
+    xout[2] ^= scratchpad[offs + 2];
+    xout[3] ^= scratchpad[offs + 3];
+    for(size_t j = 0; j < 40; j += 4) {
+      aes_encode(AES0, AES1, AES2, AES3, k + j, xout);
     }
-    offs = (4 + b) << 2;
-    state[offs + 0] = xout[0];
-    state[offs + 1] = xout[1];
-    state[offs + 2] = xout[2];
-    state[offs + 3] = xout[3];
   }
+  offs = (4 + b) << 2;
+  state[offs + 0] = xout[0];
+  state[offs + 1] = xout[1];
+  state[offs + 2] = xout[2];
+  state[offs + 3] = xout[3];
 }
 
 #define INPUT_SIZE_ULONG                                                       \
@@ -538,8 +538,6 @@ kernel void cn_implode(global uint *scratchpad_begin,
   // implode scratchpad
   implode_scratchpad(AES0, AES1, AES2, AES3, (global uint *)hash_state, scratchpad);
 
-  // keccak of 24 bytes of final hash
-  keccakf1600(hash_state);
 }
 
 )==="

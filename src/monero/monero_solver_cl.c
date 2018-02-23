@@ -18,6 +18,7 @@
 #include "crypto/groestl.h"
 #include "crypto/jh.h"
 #include "crypto/skein.h"
+#include "crypto/keccak-tiny.h"
 
 #define INPUT_BUFFER_SIZE MONERO_INPUT_HASH_LEN
 #define SCRATCHPAD_BUFFER_SIZE(threads)                                        \
@@ -169,8 +170,7 @@ int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from)
   size_t lw[2] = { local_work_size, 8};
   size_t go[2] = { global_offset, 0};
   ret = clEnqueueNDRangeKernel(ctx->command_queue, ctx->krn_explode, 2,
-                               go, gw,
-                               lw, 0, NULL, NULL);
+                               go, gw, lw, 0, NULL, NULL);
   if (ret != CL_SUCCESS) {
     log_error("Error when calling clEnqueueNDRangeKernel: %s", cl_err_str(ret));
     return -1;
@@ -184,9 +184,8 @@ int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from)
     return -1;
   }
 
- ret = clEnqueueNDRangeKernel(ctx->command_queue, ctx->krn_implode, 1,
-                               &global_offset, &global_work_size,
-                               &local_work_size, 0, NULL, NULL);
+ ret = clEnqueueNDRangeKernel(ctx->command_queue, ctx->krn_implode, 2,
+                              go, gw, lw, 0, NULL, NULL);
   if (ret != CL_SUCCESS) {
     log_error("Error when calling clEnqueueNDRangeKernel: %s", cl_err_str(ret));
     return -1;
@@ -211,6 +210,9 @@ int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from)
 
   for (size_t i = 0; i < global_work_size; ++i) {
     uint8_t *hash_state = solver->output_buffer + i * OUT_SZ;
+
+    keccak_f((uint64_t *)hash_state, 24);
+
     const int final_hash_idx = hash_state[0] & 3;
     extra_hashes[final_hash_idx](hash_state, OUT_SZ * 8, output);
 
@@ -224,7 +226,7 @@ int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from)
     }
 
     // compare against CPU version
-    #define  __VERIFY_CL_
+    //    #define  __VERIFY_CL_
 #ifdef __VERIFY_CL_
     log_debug("Verifying results");
     printf("+++: %d\n", final_hash_idx);
