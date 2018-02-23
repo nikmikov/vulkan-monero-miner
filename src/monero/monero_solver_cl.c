@@ -34,10 +34,7 @@ struct monero_solver_cl_context {
   cl_device_id device_id;
   cl_command_queue command_queue;
   cl_program cryptonight_program;
-  cl_kernel cryptonight_kernel;
-
   cl_kernel krn_init, krn_explode, krn_memloop, krn_implode;
-
 
   cl_mem input_buffer;
   cl_mem scratchpad_buffer;
@@ -227,7 +224,7 @@ int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from)
 
     // compare against CPU version
     //    #define  __VERIFY_CL_
-#ifdef __VERIFY_CL_
+    #ifdef __VERIFY_CL_
     log_debug("Verifying results");
     printf("+++: %d\n", final_hash_idx);
     *(uint32_t *)&solver->input_hash[MONERO_NONCE_POSITION] = nonce_from + i;
@@ -405,8 +402,8 @@ void monero_solver_cl_context_release(struct monero_solver_cl_context *ctx)
   if (ctx->input_buffer != NULL) {
     clReleaseMemObject(ctx->input_buffer);
   }
-  if (ctx->cryptonight_kernel != NULL) {
-    clReleaseKernel(ctx->cryptonight_kernel);
+  if (ctx->krn_init != NULL) {
+    clReleaseKernel(ctx->krn_init);
   }
   if (ctx->cryptonight_program != NULL) {
     clReleaseProgram(ctx->cryptonight_program);
@@ -552,15 +549,6 @@ bool monero_solver_cl_context_prepare_kernel(
     port_sleep(1);
 
   } while (status == CL_BUILD_IN_PROGRESS);
-
-
-  ctx->cryptonight_kernel =
-      clCreateKernel(ctx->cryptonight_program, "cryptonight", &ret);
-  if (ret != CL_SUCCESS) {
-    log_error("Error when calling clCreateKernel for kernel cryptonigth: %s",
-              cl_err_str(ret));
-    return false;
-  }
 
   // split kernels
   ctx->krn_init =
