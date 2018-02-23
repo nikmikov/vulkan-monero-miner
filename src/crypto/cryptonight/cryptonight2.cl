@@ -405,15 +405,18 @@ kernel void cn_init(global const ulong *input,
 
 }
 
-kernel void cn_explode(global uint *scratchpad_begin,
+kernel void cn_explode(global uint *scratchpad_0,
+                       global uint *scratchpad_1,
                        global ulong *output)
 {
   const size_t work_id = get_global_id(0) - get_global_offset(0);
 
+  global uint *scratchpad_begin = (work_id & 0x01) ? scratchpad_0 : scratchpad_1;
+
   global ulong *hash_state = output + work_id * HASH_STATE_SIZE_ULONG;
 
   global uint *scratchpad =
-      scratchpad_begin + work_id * CRYPTONIGHT_MEMORY_UINT;
+      scratchpad_begin + (work_id >> 1) * CRYPTONIGHT_MEMORY_UINT;
 
   local uint AES0[256], AES1[256], AES2[256], AES3[256];
   for (size_t i = get_local_id(0) ; i < 256; i += get_local_size(0)) {
@@ -428,15 +431,19 @@ kernel void cn_explode(global uint *scratchpad_begin,
   explode_scratchpad(AES0, AES1, AES2, AES3, (global uint *)hash_state, scratchpad);
 }
 
-kernel void cn_memloop(global uint *scratchpad_begin,
-                           global ulong *output)
+kernel void cn_memloop(global uint *scratchpad_0,
+                       global uint *scratchpad_1,
+                       global ulong *output)
 {
+
   const size_t work_id = get_global_id(0) - get_global_offset(0);
+
+  global uint *scratchpad_begin = (work_id & 0x01) ? scratchpad_0 : scratchpad_1;
 
   global ulong *hash_state = output + work_id * HASH_STATE_SIZE_ULONG;
 
   global uint *scratchpad =
-      scratchpad_begin + work_id * CRYPTONIGHT_MEMORY_UINT;
+      scratchpad_begin + (work_id >> 1) * CRYPTONIGHT_MEMORY_UINT;
 
   local uint AES0[256], AES1[256], AES2[256], AES3[256];
   for (size_t i = get_local_id(0) ; i < 256; i += get_local_size(0)) {
@@ -462,15 +469,18 @@ kernel void cn_memloop(global uint *scratchpad_begin,
 
 }
 
-kernel void cn_implode(global uint *scratchpad_begin,
+kernel void cn_implode(global uint *scratchpad_0,
+                       global uint *scratchpad_1,
                        global ulong *output)
 {
   const size_t work_id = get_global_id(0) - get_global_offset(0);
 
+  global uint *scratchpad_begin = (work_id & 0x01) ? scratchpad_0 : scratchpad_1;
+
   global ulong *hash_state = output + work_id * HASH_STATE_SIZE_ULONG;
 
   global uint *scratchpad =
-      scratchpad_begin + work_id * CRYPTONIGHT_MEMORY_UINT;
+      scratchpad_begin + (work_id >> 1) * CRYPTONIGHT_MEMORY_UINT;
 
   local uint AES0[256], AES1[256], AES2[256], AES3[256];
   for (size_t i = get_local_id(0) ; i < 256; i += get_local_size(0)) {
