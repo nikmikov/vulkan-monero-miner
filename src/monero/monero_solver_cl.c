@@ -34,6 +34,10 @@ struct monero_solver_cl_context {
   cl_command_queue command_queue;
   cl_program cryptonight_program;
   cl_kernel cryptonight_kernel;
+
+  cl_kernel krn_init, krn_explode, krn_memloop, krn_implode;
+
+
   cl_mem input_buffer;
   cl_mem scratchpad_buffer;
   cl_mem output_buffer;
@@ -119,7 +123,7 @@ bool monero_solver_cl_set_job(struct monero_solver *ptr,
   }
 
   // INPUT
-  ret = clSetKernelArg(ctx->cryptonight_kernel, 0, sizeof(cl_mem),
+  ret = clSetKernelArg(ctx->krn_init, 0, sizeof(cl_mem),
                        &ctx->input_buffer);
   if (ret != CL_SUCCESS) {
     log_error("Error when calling clSetKernelArg for arg #0[input_buffer]: %s",
@@ -127,25 +131,6 @@ bool monero_solver_cl_set_job(struct monero_solver *ptr,
     return false;
   }
 
-  // SCRATCHPAD
-  ret = clSetKernelArg(ctx->cryptonight_kernel, 1, sizeof(cl_mem),
-                       &ctx->scratchpad_buffer);
-  if (ret != CL_SUCCESS) {
-    log_error(
-        "Error when calling clSetKernelArg for arg #1[scratchpad_buffer]: %s",
-        cl_err_str(ret));
-    return false;
-    ;
-  }
-
-  // OUTPUT BUFFER
-  ret = clSetKernelArg(ctx->cryptonight_kernel, 2, sizeof(cl_mem),
-                       &ctx->output_buffer);
-  if (ret != CL_SUCCESS) {
-    log_error("Error when calling clSetKernelArg for arg #2[output_buffer]: %s",
-              cl_err_str(ret));
-    return false;
-  }
   return true;
 }
 
@@ -172,7 +157,31 @@ int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from)
 
   size_t global_offset = nonce_from;
 
-  ret = clEnqueueNDRangeKernel(ctx->command_queue, ctx->cryptonight_kernel, 1,
+  ret = clEnqueueNDRangeKernel(ctx->command_queue, ctx->krn_init, 1,
+                               &global_offset, &global_work_size,
+                               &local_work_size, 0, NULL, NULL);
+  if (ret != CL_SUCCESS) {
+    log_error("Error when calling clEnqueueNDRangeKernel: %s", cl_err_str(ret));
+    return -1;
+  }
+
+  ret = clEnqueueNDRangeKernel(ctx->command_queue, ctx->krn_explode, 1,
+                               &global_offset, &global_work_size,
+                               &local_work_size, 0, NULL, NULL);
+  if (ret != CL_SUCCESS) {
+    log_error("Error when calling clEnqueueNDRangeKernel: %s", cl_err_str(ret));
+    return -1;
+  }
+
+ ret = clEnqueueNDRangeKernel(ctx->command_queue, ctx->krn_memloop, 1,
+                               &global_offset, &global_work_size,
+                               &local_work_size, 0, NULL, NULL);
+  if (ret != CL_SUCCESS) {
+    log_error("Error when calling clEnqueueNDRangeKernel: %s", cl_err_str(ret));
+    return -1;
+  }
+
+ ret = clEnqueueNDRangeKernel(ctx->command_queue, ctx->krn_implode, 1,
                                &global_offset, &global_work_size,
                                &local_work_size, 0, NULL, NULL);
   if (ret != CL_SUCCESS) {
@@ -212,7 +221,7 @@ int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from)
     }
 
     // compare against CPU version
-    //#define  __VERIFY_CL_
+    #define  __VERIFY_CL_
 #ifdef __VERIFY_CL_
     log_debug("Verifying results");
     printf("+++: %d\n", final_hash_idx);
@@ -539,10 +548,44 @@ bool monero_solver_cl_context_prepare_kernel(
 
   } while (status == CL_BUILD_IN_PROGRESS);
 
+
   ctx->cryptonight_kernel =
       clCreateKernel(ctx->cryptonight_program, "cryptonight", &ret);
   if (ret != CL_SUCCESS) {
     log_error("Error when calling clCreateKernel for kernel cryptonigth: %s",
+              cl_err_str(ret));
+    return false;
+  }
+
+  // split kernels
+  ctx->krn_init =
+      clCreateKernel(ctx->cryptonight_program, "cn_init", &ret);
+  if (ret != CL_SUCCESS) {
+    log_error("Error when calling clCreateKernel for kernel cn_init: %s",
+              cl_err_str(ret));
+    return false;
+  }
+
+  ctx->krn_explode =
+      clCreateKernel(ctx->cryptonight_program, "cn_explode", &ret);
+  if (ret != CL_SUCCESS) {
+    log_error("Error when calling clCreateKernel for kernel cn_explode: %s",
+              cl_err_str(ret));
+    return false;
+  }
+
+  ctx->krn_memloop =
+      clCreateKernel(ctx->cryptonight_program, "cn_memloop", &ret);
+  if (ret != CL_SUCCESS) {
+    log_error("Error when calling clCreateKernel for kernel cn_memloop: %s",
+              cl_err_str(ret));
+    return false;
+  }
+
+  ctx->krn_implode =
+      clCreateKernel(ctx->cryptonight_program, "cn_implode", &ret);
+  if (ret != CL_SUCCESS) {
+    log_error("Error when calling clCreateKernel for kernel cn_memloop: %s",
               cl_err_str(ret));
     return false;
   }
@@ -574,6 +617,72 @@ bool monero_solver_cl_context_prepare_kernel(
                      OUTPUT_BUFFER_SIZE(ctx->intensity), NULL, &ret);
   if (ret != CL_SUCCESS) {
     log_error("Error when calling clCreateBuffer for output buffer: %s",
+              cl_err_str(ret));
+    return false;
+  }
+
+  // KRN_INIT
+  ret = clSetKernelArg(ctx->krn_init, 1, sizeof(cl_mem),
+                       &ctx->output_buffer);
+  if (ret != CL_SUCCESS) {
+    log_error("Error when calling clSetKernelArg for arg #2[output_buffer]: %s",
+              cl_err_str(ret));
+    return false;
+  }
+
+  // EXPLODE
+  ret = clSetKernelArg(ctx->krn_explode, 0, sizeof(cl_mem),
+                       &ctx->scratchpad_buffer);
+  if (ret != CL_SUCCESS) {
+    log_error(
+        "Error when calling clSetKernelArg for arg #1[scratchpad_buffer]: %s",
+        cl_err_str(ret));
+    return false;
+    ;
+  }
+
+  ret = clSetKernelArg(ctx->krn_explode, 1, sizeof(cl_mem),
+                       &ctx->output_buffer);
+  if (ret != CL_SUCCESS) {
+    log_error("Error when calling clSetKernelArg for arg #2[output_buffer]: %s",
+              cl_err_str(ret));
+    return false;
+  }
+
+  // MEM LOOP
+  ret = clSetKernelArg(ctx->krn_memloop, 0, sizeof(cl_mem),
+                       &ctx->scratchpad_buffer);
+  if (ret != CL_SUCCESS) {
+    log_error(
+        "Error when calling clSetKernelArg for arg #1[scratchpad_buffer]: %s",
+        cl_err_str(ret));
+    return false;
+    ;
+  }
+
+  ret = clSetKernelArg(ctx->krn_memloop, 1, sizeof(cl_mem),
+                       &ctx->output_buffer);
+  if (ret != CL_SUCCESS) {
+    log_error("Error when calling clSetKernelArg for arg #2[output_buffer]: %s",
+              cl_err_str(ret));
+    return false;
+  }
+
+  // IMPLODE
+  ret = clSetKernelArg(ctx->krn_implode, 0, sizeof(cl_mem),
+                       &ctx->scratchpad_buffer);
+  if (ret != CL_SUCCESS) {
+    log_error(
+        "Error when calling clSetKernelArg for arg #1[scratchpad_buffer]: %s",
+        cl_err_str(ret));
+    return false;
+    ;
+  }
+
+  ret = clSetKernelArg(ctx->krn_implode, 1, sizeof(cl_mem),
+                       &ctx->output_buffer);
+  if (ret != CL_SUCCESS) {
+    log_error("Error when calling clSetKernelArg for arg #2[output_buffer]: %s",
               cl_err_str(ret));
     return false;
   }

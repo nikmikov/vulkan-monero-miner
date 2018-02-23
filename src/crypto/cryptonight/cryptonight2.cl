@@ -321,8 +321,8 @@ static inline void memory_hard_loop(const local uint *AES0, const local uint *AE
 }
 
 static inline void implode_scratchpad(const local uint *AES0, const local uint *AES1,
-                                     const local uint *AES2, const local uint *AES3,
-                                     global uint *state, global uint *scratchpad)
+                                      const local uint *AES2, const local uint *AES3,
+                                      global uint *state, global uint *scratchpad)
 {
   uint k[40];
   // bytes 32..63 of the Keccak final state are
@@ -437,4 +437,106 @@ kernel void cryptonight(global const ulong *input,
   // keccak of 24 bytes of final hash
   keccakf1600(hash_state);
 }
+
+kernel void cn_init(global const ulong *input,
+                    global ulong *output)
+{
+  const size_t work_id = get_global_id(0) - get_global_offset(0);
+
+  global ulong *hash_state = output + work_id * HASH_STATE_SIZE_ULONG;
+
+  uint nonce = get_global_id(0);
+
+  // copy hash and insert work nonce
+  hash_state_init_with_nonce(input, nonce, hash_state);
+
+  // run keccak on input hash
+  keccakf1600(hash_state);
+
+}
+
+kernel void cn_explode(global uint *scratchpad_begin,
+                       global ulong *output)
+{
+  const size_t work_id = get_global_id(0) - get_global_offset(0);
+
+  global ulong *hash_state = output + work_id * HASH_STATE_SIZE_ULONG;
+
+  global uint *scratchpad =
+      scratchpad_begin + work_id * CRYPTONIGHT_MEMORY_UINT;
+
+  local uint AES0[256], AES1[256], AES2[256], AES3[256];
+  for (size_t i = get_local_id(0) ; i < 256; i += get_local_size(0)) {
+      const uint tmp = aes_table[0][i];
+      AES0[i] = tmp;
+      AES1[i] = rotate(tmp, 8U);
+      AES2[i] = rotate(tmp, 16U);
+      AES3[i] = rotate(tmp, 24U);
+  }
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  explode_scratchpad(AES0, AES1, AES2, AES3, (global uint *)hash_state, scratchpad);
+}
+
+kernel void cn_memloop(global uint *scratchpad_begin,
+                           global ulong *output)
+{
+  const size_t work_id = get_global_id(0) - get_global_offset(0);
+
+  global ulong *hash_state = output + work_id * HASH_STATE_SIZE_ULONG;
+
+  global uint *scratchpad =
+      scratchpad_begin + work_id * CRYPTONIGHT_MEMORY_UINT;
+
+  local uint AES0[256], AES1[256], AES2[256], AES3[256];
+  for (size_t i = get_local_id(0) ; i < 256; i += get_local_size(0)) {
+      const uint tmp = aes_table[0][i];
+      AES0[i] = tmp;
+      AES1[i] = rotate(tmp, 8U);
+      AES2[i] = rotate(tmp, 16U);
+      AES3[i] = rotate(tmp, 24U);
+  }
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  // Bytes 0..31 and 32..63 of the Keccak state
+  // are XORed, and the resulting 32 bytes are used to initialize
+  // variables a and b, 16 bytes each.
+  ulong x0[4] = {
+    hash_state[0] ^ hash_state[4],
+    hash_state[1] ^ hash_state[5],
+    hash_state[2] ^ hash_state[6],
+    hash_state[3] ^ hash_state[7]};
+
+  // run main cryptonight loop
+  memory_hard_loop(AES0, AES1, AES2, AES3, x0, scratchpad);
+
+}
+
+kernel void cn_implode(global uint *scratchpad_begin,
+                       global ulong *output)
+{
+  const size_t work_id = get_global_id(0) - get_global_offset(0);
+
+  global ulong *hash_state = output + work_id * HASH_STATE_SIZE_ULONG;
+
+  global uint *scratchpad =
+      scratchpad_begin + work_id * CRYPTONIGHT_MEMORY_UINT;
+
+  local uint AES0[256], AES1[256], AES2[256], AES3[256];
+  for (size_t i = get_local_id(0) ; i < 256; i += get_local_size(0)) {
+      const uint tmp = aes_table[0][i];
+      AES0[i] = tmp;
+      AES1[i] = rotate(tmp, 8U);
+      AES2[i] = rotate(tmp, 16U);
+      AES3[i] = rotate(tmp, 24U);
+  }
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  // implode scratchpad
+  implode_scratchpad(AES0, AES1, AES2, AES3, (global uint *)hash_state, scratchpad);
+
+  // keccak of 24 bytes of final hash
+  keccakf1600(hash_state);
+}
+
 )==="
