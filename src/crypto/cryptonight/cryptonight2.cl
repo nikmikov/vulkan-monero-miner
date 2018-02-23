@@ -226,6 +226,8 @@ static inline void explode_scratchpad(const local uint *AES0, const local uint *
                                       const local uint *AES2, const local uint *AES3,
                                       global uint *state, global uint *scratchpad)
 {
+  size_t b = get_global_id(1);
+
   uint k[40];
 
   // bytes 0..31 of the Keccak final state are
@@ -238,25 +240,26 @@ static inline void explode_scratchpad(const local uint *AES0, const local uint *
 
   // Each block is encrypted using the following procedure
   // `block = aes_round(block, round_keys[i])`
-  for(size_t b = 0; b < 8; ++b) {
-    uint xin[4];
-    uint offs = (4 + b) << 2;
-    xin[0] =  state[offs + 0];
-    xin[1] =  state[offs + 1];
-    xin[2] =  state[offs + 2];
-    xin[3] =  state[offs + 3];
 
-    for (size_t i = b; i < CRYPTONIGHT_MEMORY_UINT4; i += 8) {
-      for(size_t j = 0; j < 40; j += 4) {
-        aes_encode(AES0, AES1, AES2, AES3, k + j, xin);
-      }
-      offs = i << 2;
-      scratchpad[offs + 0] = xin[0];
-      scratchpad[offs + 1] = xin[1];
-      scratchpad[offs + 2] = xin[2];
-      scratchpad[offs + 3] = xin[3];
+  uint xin[4];
+  uint offs = (4 + b) << 2;
+  xin[0] =  state[offs + 0];
+  xin[1] =  state[offs + 1];
+  xin[2] =  state[offs + 2];
+  xin[3] =  state[offs + 3];
+
+  for (size_t i = b; i < CRYPTONIGHT_MEMORY_UINT4; i += 8) {
+    #pragma unroll
+    for(size_t j = 0; j < 40; j += 4) {
+      aes_encode(AES0, AES1, AES2, AES3, k + j, xin);
     }
+    offs = i << 2;
+    scratchpad[offs + 0] = xin[0];
+    scratchpad[offs + 1] = xin[1];
+    scratchpad[offs + 2] = xin[2];
+    scratchpad[offs + 3] = xin[3];
   }
+
 }
 
 static inline size_t to_scratchpad_address(ulong v)

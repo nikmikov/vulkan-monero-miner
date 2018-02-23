@@ -113,7 +113,7 @@ bool monero_solver_cl_set_job(struct monero_solver *ptr,
   struct monero_solver_cl_context *ctx = solver->cl;
   assert(ctx != NULL);
   // INPUT BUFFER DATA
-  ret = clEnqueueWriteBuffer(ctx->command_queue, ctx->input_buffer, CL_TRUE, 0,
+  ret = clEnqueueWriteBuffer(ctx->command_queue, ctx->input_buffer, CL_FALSE, 0,
                              INPUT_BUFFER_SIZE, input_buffer, 0, NULL, NULL);
 
   if (ret != CL_SUCCESS) {
@@ -165,9 +165,12 @@ int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from)
     return -1;
   }
 
-  ret = clEnqueueNDRangeKernel(ctx->command_queue, ctx->krn_explode, 1,
-                               &global_offset, &global_work_size,
-                               &local_work_size, 0, NULL, NULL);
+  size_t gw[2] = { global_work_size, 8};
+  size_t lw[2] = { local_work_size, 8};
+  size_t go[2] = { global_offset, 0};
+  ret = clEnqueueNDRangeKernel(ctx->command_queue, ctx->krn_explode, 2,
+                               go, gw,
+                               lw, 0, NULL, NULL);
   if (ret != CL_SUCCESS) {
     log_error("Error when calling clEnqueueNDRangeKernel: %s", cl_err_str(ret));
     return -1;
