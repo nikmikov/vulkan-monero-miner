@@ -335,11 +335,11 @@ kernel void cn_explode(global uint *scratchpad_begin,
 
 __attribute__((reqd_work_group_size(WORKSIZE, 1, 1)))
 kernel void cn_memloop(global uint *scratchpad_begin,
-                       global ulong *output)
+                       global uint *output)
 {
   const size_t work_id = get_global_id(0) - get_global_offset(0);
 
-  global ulong *state = output + work_id * HASH_STATE_SIZE_ULONG;
+  global uint *state = output + work_id * HASH_STATE_SIZE_UINT;
 
   global uint *scratchpad =
       scratchpad_begin + work_id * CRYPTONIGHT_MEMORY_UINT;
@@ -357,19 +357,20 @@ kernel void cn_memloop(global uint *scratchpad_begin,
   // Bytes 0..31 and 32..63 of the Keccak state
   // are XORed, and the resulting 32 bytes are used to initialize
   // variables a and b, 16 bytes each.
-  ulong4 x0 = vload4(0, state) ^ vload4(1, state);
 
-  // run main cryptonight loop
   union {
-    ulong4 v;
     struct {
       uint4 a, b;
     };
     struct {
       ulong a0, a1, b0, b1;
     };
-  } X = {.v = x0};
+  } X = {
+     .a = vload4(0, state) ^ vload4(2, state),
+     .b = vload4(1, state) ^ vload4(3, state)
+  };
 
+  // run main cryptonight loop
   for (size_t i = 0; i < CRYPTONIGHT_ITERATIONS; ++i) {
     // addr = to_scratchpad_address(a)
     const size_t idx_a = TO_IDX(X.a0);
