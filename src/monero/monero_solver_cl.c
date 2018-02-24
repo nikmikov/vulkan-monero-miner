@@ -37,8 +37,7 @@ struct monero_solver_cl_context {
   cl_kernel krn_init, krn_explode, krn_memloop, krn_implode;
 
   cl_mem input_buffer;
-  cl_mem scratchpad_buffer_0;
-  cl_mem scratchpad_buffer_1;
+  cl_mem scratchpad_buffer;
   cl_mem output_buffer;
 
   /** Device info and capabilities */
@@ -224,7 +223,7 @@ int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from)
     }
 
     // compare against CPU version
-    //    #define  __VERIFY_CL_
+        #define  __VERIFY_CL_
     #ifdef __VERIFY_CL_
     log_debug("Verifying results");
     printf("+++: %d\n", final_hash_idx);
@@ -394,11 +393,8 @@ monero_solver_cl_context_init(cl_uint platform_id, cl_uint device_id,
 
 void monero_solver_cl_context_release(struct monero_solver_cl_context *ctx)
 {
-  if (ctx->scratchpad_buffer_0 != NULL) {
-    clReleaseMemObject(ctx->scratchpad_buffer_0);
-  }
-  if (ctx->scratchpad_buffer_1 != NULL) {
-    clReleaseMemObject(ctx->scratchpad_buffer_1);
+  if (ctx->scratchpad_buffer != NULL) {
+    clReleaseMemObject(ctx->scratchpad_buffer);
   }
   if (ctx->output_buffer != NULL) {
     clReleaseMemObject(ctx->output_buffer);
@@ -596,26 +592,14 @@ bool monero_solver_cl_context_prepare_kernel(
     return false;
   }
 
-  const size_t scratchpad_buffer_size = SCRATCHPAD_BUFFER_SIZE(ctx->intensity) / 2;
-  log_debug("Allocating scratchpad buffer 0 of %lu bytes",
+  const size_t scratchpad_buffer_size = SCRATCHPAD_BUFFER_SIZE(ctx->intensity);
+  log_debug("Allocating scratchpad buffer of %lu bytes",
             scratchpad_buffer_size);
-  ctx->scratchpad_buffer_0 =
+  ctx->scratchpad_buffer =
       clCreateBuffer(ctx->cl_ctx, CL_MEM_READ_WRITE | CL_MEM_HOST_NO_ACCESS,
                      scratchpad_buffer_size, NULL, &ret);
   if (ret != CL_SUCCESS) {
-    log_error("Error when calling clCreateBuffer for scratchpad buffer 0 of "
-              "size(%lu): %s",
-              scratchpad_buffer_size, cl_err_str(ret));
-    return false;
-  }
-
-  log_debug("Allocating scratchpad buffer 1 of %lu bytes",
-            scratchpad_buffer_size);
-  ctx->scratchpad_buffer_1 =
-      clCreateBuffer(ctx->cl_ctx, CL_MEM_READ_WRITE | CL_MEM_HOST_NO_ACCESS,
-                     scratchpad_buffer_size, NULL, &ret);
-  if (ret != CL_SUCCESS) {
-    log_error("Error when calling clCreateBuffer for scratchpad buffer 1 of "
+    log_error("Error when calling clCreateBuffer for scratchpad buffer of "
               "size(%lu): %s",
               scratchpad_buffer_size, cl_err_str(ret));
     return false;
@@ -634,33 +618,23 @@ bool monero_solver_cl_context_prepare_kernel(
   ret = clSetKernelArg(ctx->krn_init, 1, sizeof(cl_mem),
                        &ctx->output_buffer);
   if (ret != CL_SUCCESS) {
-    log_error("Error when calling clSetKernelArg for arg #1[output_buffer]: %s",
+    log_error("Error when calling clSetKernelArg for arg #2[output_buffer]: %s",
               cl_err_str(ret));
     return false;
   }
 
   // EXPLODE
   ret = clSetKernelArg(ctx->krn_explode, 0, sizeof(cl_mem),
-                       &ctx->scratchpad_buffer_0);
+                       &ctx->scratchpad_buffer);
   if (ret != CL_SUCCESS) {
     log_error(
-        "Error when calling clSetKernelArg for arg #0[scratchpad_buffer_0]: %s",
+        "Error when calling clSetKernelArg for arg #1[scratchpad_buffer]: %s",
         cl_err_str(ret));
     return false;
     ;
   }
 
   ret = clSetKernelArg(ctx->krn_explode, 1, sizeof(cl_mem),
-                       &ctx->scratchpad_buffer_1);
-  if (ret != CL_SUCCESS) {
-    log_error(
-        "Error when calling clSetKernelArg for arg #1[scratchpad_buffer_1]: %s",
-        cl_err_str(ret));
-    return false;
-    ;
-  }
-
-  ret = clSetKernelArg(ctx->krn_explode, 2, sizeof(cl_mem),
                        &ctx->output_buffer);
   if (ret != CL_SUCCESS) {
     log_error("Error when calling clSetKernelArg for arg #2[output_buffer]: %s",
@@ -670,26 +644,16 @@ bool monero_solver_cl_context_prepare_kernel(
 
   // MEM LOOP
   ret = clSetKernelArg(ctx->krn_memloop, 0, sizeof(cl_mem),
-                       &ctx->scratchpad_buffer_0);
+                       &ctx->scratchpad_buffer);
   if (ret != CL_SUCCESS) {
     log_error(
-        "Error when calling clSetKernelArg for arg #0[scratchpad_buffer_0]: %s",
+        "Error when calling clSetKernelArg for arg #1[scratchpad_buffer]: %s",
         cl_err_str(ret));
     return false;
     ;
   }
 
   ret = clSetKernelArg(ctx->krn_memloop, 1, sizeof(cl_mem),
-                       &ctx->scratchpad_buffer_1);
-  if (ret != CL_SUCCESS) {
-    log_error(
-        "Error when calling clSetKernelArg for arg #1[scratchpad_buffer_1]: %s",
-        cl_err_str(ret));
-    return false;
-    ;
-  }
-
-  ret = clSetKernelArg(ctx->krn_memloop, 2, sizeof(cl_mem),
                        &ctx->output_buffer);
   if (ret != CL_SUCCESS) {
     log_error("Error when calling clSetKernelArg for arg #2[output_buffer]: %s",
@@ -699,26 +663,16 @@ bool monero_solver_cl_context_prepare_kernel(
 
   // IMPLODE
   ret = clSetKernelArg(ctx->krn_implode, 0, sizeof(cl_mem),
-                       &ctx->scratchpad_buffer_0);
+                       &ctx->scratchpad_buffer);
   if (ret != CL_SUCCESS) {
     log_error(
-        "Error when calling clSetKernelArg for arg #0[scratchpad_buffer_0]: %s",
+        "Error when calling clSetKernelArg for arg #1[scratchpad_buffer]: %s",
         cl_err_str(ret));
     return false;
     ;
   }
 
   ret = clSetKernelArg(ctx->krn_implode, 1, sizeof(cl_mem),
-                       &ctx->scratchpad_buffer_1);
-  if (ret != CL_SUCCESS) {
-    log_error(
-        "Error when calling clSetKernelArg for arg #1[scratchpad_buffer_1]: %s",
-        cl_err_str(ret));
-    return false;
-    ;
-  }
-
-  ret = clSetKernelArg(ctx->krn_implode, 2, sizeof(cl_mem),
                        &ctx->output_buffer);
   if (ret != CL_SUCCESS) {
     log_error("Error when calling clSetKernelArg for arg #2[output_buffer]: %s",

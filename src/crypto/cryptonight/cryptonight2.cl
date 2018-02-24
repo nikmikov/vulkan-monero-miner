@@ -221,25 +221,6 @@ static inline void aes_encode(const local uint *AES0, const local uint *AES1,
   b[3] = AES0[BYTE0(i3)] ^ AES1[BYTE1(i0)] ^ AES2[BYTE2(i1)] ^ AES3[BYTE3(i2)] ^ k[3];
 }
 
-static inline uint4 aes_encode0(const local uint *AES0, const local uint *AES1,
-                               const local uint *AES2, const local uint *AES3,
-                               const uint4 a, const uint4 key)
-{
-  uint4 i0 = BYTE0(a);
-  uint4 i1 = BYTE1(a);
-  uint4 i2 = BYTE2(a);
-  uint4 i3 = BYTE3(a);
-
-  uint4 x = {
-    AES0[i0.s0] ^ AES1[i1.s1] ^ AES2[i2.s2] ^ AES3[i3.s3],
-    AES0[i0.s1] ^ AES1[i1.s2] ^ AES2[i2.s3] ^ AES3[i3.s0],
-    AES0[i0.s2] ^ AES1[i1.s3] ^ AES2[i2.s0] ^ AES3[i3.s1],
-    AES0[i0.s3] ^ AES1[i1.s0] ^ AES2[i2.s1] ^ AES3[i3.s2]
-  };
-
-  return x ^ key;
-}
-
 static inline void explode_scratchpad(const local uint *AES0, const local uint *AES1,
                                       const local uint *AES2, const local uint *AES3,
                                       global uint *state, global uint *scratchpad)
@@ -279,48 +260,82 @@ static inline void explode_scratchpad(const local uint *AES0, const local uint *
 
 }
 
-static inline size_t to_scratchpad_address(ulong v)
+static inline size_t to_scratchpad_address(uint v)
 {
-  return (v & CRYPTONIGHT_MASK) >> 4;
+  return (v & CRYPTONIGHT_MASK) >> 2;
 }
 
 static inline void memory_hard_loop(const local uint *AES0, const local uint *AES1,
                                     const local uint *AES2, const local uint *AES3,
-                                    ulong4 k, global uint *scratchpad)
+                                    ulong* X, global uint *scratchpad)
 {
-  union {
-    ulong4 v;
-    struct {
-      uint4 a, b;
-    };
-    struct {
-      ulong a0, a1, b0, b1;
-    };
-  } X = {.v = k};
-#pragma unroll 4
+  uint *X32 = (uint*)X;
+  uint cx[4];
+
   for (size_t i = 0; i < CRYPTONIGHT_ITERATIONS; ++i) {
     // addr = to_scratchpad_address(a)
-    const size_t idx_a = to_scratchpad_address(X.a0);
+    const size_t idx_a = to_scratchpad_address(X32[0]);
 
     // scratchpad[addr] = aes_round(scratchpad[addr], a)
-    uint4 cx = aes_encode0(AES0, AES1, AES2, AES3, vload4(idx_a, scratchpad), X.a);
-    // b, scratchpad[addr] = scratchpad[addr], b ^ scratchpad[addr]
-    vstore4(cx ^ X.b, idx_a, scratchpad);
+    uint i0 = scratchpad[idx_a + 0];
+    cx[0] = X32[0] ^ AES0[BYTE0(i0)];
+    cx[1] = X32[1] ^ AES3[BYTE3(i0)];
+    cx[2] = X32[2] ^ AES2[BYTE2(i0)];
+    cx[3] = X32[3] ^ AES1[BYTE1(i0)];
 
-    X.b = cx;
+    uint i1 = scratchpad[idx_a + 1];
+    cx[0] ^= AES1[BYTE1(i1)];
+    cx[1] ^= AES0[BYTE0(i1)];
+    cx[2] ^= AES3[BYTE3(i1)];
+    cx[3] ^= AES2[BYTE2(i1)];
+
+    uint i2 = scratchpad[idx_a + 2];
+    cx[0] ^= AES2[BYTE2(i2)];
+    cx[1] ^= AES1[BYTE1(i2)];
+    cx[2] ^= AES0[BYTE0(i2)];
+    cx[3] ^= AES3[BYTE3(i2)];
+
+    uint i3 = scratchpad[idx_a + 3];
+    cx[0] ^= AES3[BYTE3(i3)];
+    cx[1] ^= AES2[BYTE2(i3)];
+    cx[2] ^= AES1[BYTE1(i3)];
+    cx[3] ^= AES0[BYTE0(i3)];
+
+    // b, scratchpad[addr] = scratchpad[addr], b ^ scratchpad[addr]
+    scratchpad[idx_a + 0] = cx[0] ^ X32[4];
+    scratchpad[idx_a + 1] = cx[1] ^ X32[5];
+    scratchpad[idx_a + 2] = cx[2] ^ X32[6];
+    scratchpad[idx_a + 3] = cx[3] ^ X32[7];
+
+    //
+    X32[4] = cx[0];
+    X32[5] = cx[1];
+    X32[6] = cx[2];
+    X32[7] = cx[3];
 
     // addr = to_scratchpad_address(b)
-    const size_t idx_b = to_scratchpad_address(X.b0);
+    const size_t idx_b = to_scratchpad_address(X32[4]);
 
     // a = 8byte_add(a, 8byte_mul(b, scratchpad[addr]))
-    cx = vload4(idx_b, scratchpad);
-    ulong c0 = as_ulong2(cx).s0;
-    X.a1 += X.b0 * c0;
-    X.a0 += mul_hi(X.b0, c0);
+    cx[0] = scratchpad[idx_b + 0];
+    cx[1] = scratchpad[idx_b + 1];
+    cx[2] = scratchpad[idx_b + 2];
+    cx[3] = scratchpad[idx_b + 3];
+
+    ulong c0 = *(ulong*)cx;
+    X[1] += X[2] * c0;
+    X[0] += mul_hi(X[2], c0);
 
     // a, scratchpad[addr] = a ^ scratchpad[addr], a
-    vstore4(X.a, idx_b, scratchpad);
-    X.a ^= cx;
+    scratchpad[idx_b + 0] = X32[0];
+    scratchpad[idx_b + 1] = X32[1];
+    scratchpad[idx_b + 2] = X32[2];
+    scratchpad[idx_b + 3] = X32[3];
+
+    X32[0] ^= cx[0];
+    X32[1] ^= cx[1];
+    X32[2] ^= cx[2];
+    X32[3] ^= cx[3];
   }
 }
 
@@ -408,18 +423,15 @@ kernel void cn_init(global const ulong *input,
 
 }
 
-kernel void cn_explode(global uint *scratchpad_0,
-                       global uint *scratchpad_1,
+kernel void cn_explode(global uint *scratchpad_begin,
                        global ulong *output)
 {
   const size_t work_id = get_global_id(0) - get_global_offset(0);
 
-  global uint *scratchpad_begin = (work_id & 0x01) ? scratchpad_0 : scratchpad_1;
-
   global ulong *hash_state = output + work_id * HASH_STATE_SIZE_ULONG;
 
   global uint *scratchpad =
-      scratchpad_begin + (work_id >> 1) * CRYPTONIGHT_MEMORY_UINT;
+      scratchpad_begin + work_id * CRYPTONIGHT_MEMORY_UINT;
 
   local uint AES0[256], AES1[256], AES2[256], AES3[256];
   for (size_t i = get_local_id(0) ; i < 256; i += get_local_size(0)) {
@@ -434,19 +446,15 @@ kernel void cn_explode(global uint *scratchpad_0,
   explode_scratchpad(AES0, AES1, AES2, AES3, (global uint *)hash_state, scratchpad);
 }
 
-kernel void cn_memloop(global uint *scratchpad_0,
-                       global uint *scratchpad_1,
-                       global ulong *output)
+kernel void cn_memloop(global uint *scratchpad_begin,
+                           global ulong *output)
 {
-
   const size_t work_id = get_global_id(0) - get_global_offset(0);
-
-  global uint *scratchpad_begin = (work_id & 0x01) ? scratchpad_0 : scratchpad_1;
 
   global ulong *hash_state = output + work_id * HASH_STATE_SIZE_ULONG;
 
   global uint *scratchpad =
-      scratchpad_begin + (work_id >> 1) * CRYPTONIGHT_MEMORY_UINT;
+      scratchpad_begin + work_id * CRYPTONIGHT_MEMORY_UINT;
 
   local uint AES0[256], AES1[256], AES2[256], AES3[256];
   for (size_t i = get_local_id(0) ; i < 256; i += get_local_size(0)) {
@@ -461,25 +469,26 @@ kernel void cn_memloop(global uint *scratchpad_0,
   // Bytes 0..31 and 32..63 of the Keccak state
   // are XORed, and the resulting 32 bytes are used to initialize
   // variables a and b, 16 bytes each.
-   ulong4 x0 = vload4(0, hash_state) ^ vload4(1, hash_state);
+  ulong x0[4] = {
+    hash_state[0] ^ hash_state[4],
+    hash_state[1] ^ hash_state[5],
+    hash_state[2] ^ hash_state[6],
+    hash_state[3] ^ hash_state[7]};
 
   // run main cryptonight loop
   memory_hard_loop(AES0, AES1, AES2, AES3, x0, scratchpad);
 
 }
 
-kernel void cn_implode(global uint *scratchpad_0,
-                       global uint *scratchpad_1,
+kernel void cn_implode(global uint *scratchpad_begin,
                        global ulong *output)
 {
   const size_t work_id = get_global_id(0) - get_global_offset(0);
 
-  global uint *scratchpad_begin = (work_id & 0x01) ? scratchpad_0 : scratchpad_1;
-
   global ulong *hash_state = output + work_id * HASH_STATE_SIZE_ULONG;
 
   global uint *scratchpad =
-      scratchpad_begin + (work_id >> 1) * CRYPTONIGHT_MEMORY_UINT;
+      scratchpad_begin + work_id * CRYPTONIGHT_MEMORY_UINT;
 
   local uint AES0[256], AES1[256], AES2[256], AES3[256];
   for (size_t i = get_local_id(0) ; i < 256; i += get_local_size(0)) {
