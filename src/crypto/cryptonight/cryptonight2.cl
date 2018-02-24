@@ -205,25 +205,9 @@ static inline void aes_genkey(global const uint *memory, uint *k)
   }
 }
 
-// AES-encode 16-bytes block `b`, using key `k`
-static inline void aes_encode(const local uint *AES0, const local uint *AES1,
-                              const local uint *AES2, const local uint *AES3,
-                              const uint* k, uint *b)
-{
-  uint i0 = b[0];
-  uint i1 = b[1];
-  uint i2 = b[2];
-  uint i3 = b[3];
-
-  b[0] = AES0[BYTE0(i0)] ^ AES1[BYTE1(i1)] ^ AES2[BYTE2(i2)] ^ AES3[BYTE3(i3)] ^ k[0];
-  b[1] = AES0[BYTE0(i1)] ^ AES1[BYTE1(i2)] ^ AES2[BYTE2(i3)] ^ AES3[BYTE3(i0)] ^ k[1];
-  b[2] = AES0[BYTE0(i2)] ^ AES1[BYTE1(i3)] ^ AES2[BYTE2(i0)] ^ AES3[BYTE3(i1)] ^ k[2];
-  b[3] = AES0[BYTE0(i3)] ^ AES1[BYTE1(i0)] ^ AES2[BYTE2(i1)] ^ AES3[BYTE3(i2)] ^ k[3];
-}
-
-static inline uint4 aes_encode0(const local uint *AES0, const local uint *AES1,
-                                const local uint *AES2, const local uint *AES3,
-                                const uint4 a, const uint* k)
+static inline uint4 aes_encode(const local uint *AES0, const local uint *AES1,
+                               const local uint *AES2, const local uint *AES3,
+                               const uint4 a, const uint* k)
 {
   uint4 i0 = BYTE0(a);
   uint4 i1 = BYTE1(a);
@@ -239,9 +223,6 @@ static inline uint4 aes_encode0(const local uint *AES0, const local uint *AES1,
 
   return x;
 }
-
-
-
 
 #define INPUT_SIZE_ULONG                                                       \
   (INPUT_HASH_SIZE / sizeof(ulong)) /* 11x8 == 88 bytes */
@@ -287,7 +268,9 @@ kernel void cn_init(global const ulong *input,
 
 }
 
+#ifdef WORKSIZE
 __attribute__((reqd_work_group_size(WORKSIZE, 8, 1)))
+#endif
 kernel void cn_explode(global uint *scratchpad_begin,
                        global uint *output)
 {
@@ -325,7 +308,7 @@ kernel void cn_explode(global uint *scratchpad_begin,
   uint4 xin = vload4(4 + b, state);;
   for (size_t i = b; i < CRYPTONIGHT_MEMORY_UINT4; i += 8) {
     for(size_t j = 0; j < 40; j += 4) {
-      xin = aes_encode0(AES0, AES1, AES2, AES3, xin, k + j);
+      xin = aes_encode(AES0, AES1, AES2, AES3, xin, k + j);
     }
     vstore4(xin, i, scratchpad);
   }
@@ -333,7 +316,9 @@ kernel void cn_explode(global uint *scratchpad_begin,
 
 #define TO_IDX(v) ((v & CRYPTONIGHT_MASK) >> 4)
 
+#ifdef WORKSIZE
 __attribute__((reqd_work_group_size(WORKSIZE, 1, 1)))
+#endif
 kernel void cn_memloop(global uint *scratchpad_begin,
                        global uint *output)
 {
@@ -376,10 +361,9 @@ kernel void cn_memloop(global uint *scratchpad_begin,
     const size_t idx_a = TO_IDX(X.a0);
 
     // scratchpad[addr] = aes_round(scratchpad[addr], a)
-    uint4 cx = aes_encode0(AES0, AES1, AES2, AES3, vload4(idx_a, scratchpad), (uint*)&X.a0);
+    uint4 cx = aes_encode(AES0, AES1, AES2, AES3, vload4(idx_a, scratchpad), (uint*)&X.a);
     // b, scratchpad[addr] = scratchpad[addr], b ^ scratchpad[addr]
     vstore4(cx ^ X.b, idx_a, scratchpad);
-
     X.b = cx;
 
     // addr = to_scratchpad_address(b)
@@ -397,7 +381,9 @@ kernel void cn_memloop(global uint *scratchpad_begin,
   }
 }
 
+#ifdef WORKSIZE
 __attribute__((reqd_work_group_size(WORKSIZE, 8, 1)))
+#endif
 kernel void cn_implode(global uint *scratchpad_begin,
                        global uint *output)
 {
@@ -435,7 +421,7 @@ kernel void cn_implode(global uint *scratchpad_begin,
   for (size_t i = b; i < CRYPTONIGHT_MEMORY_UINT4; i += 8) {
     xout ^= vload4(i, scratchpad);
     for(size_t j = 0; j < 40; j += 4) {
-      xout = aes_encode0(AES0, AES1, AES2, AES3, xout, k + j);
+      xout = aes_encode(AES0, AES1, AES2, AES3, xout, k + j);
     }
   }
   vstore4(xout, 4 + b, state);
