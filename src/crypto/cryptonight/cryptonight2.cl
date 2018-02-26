@@ -41,7 +41,6 @@ static const constant ulong keccakf_rndc[24] = {
     0x8000000000008080, 0x0000000080000001, 0x8000000080008008};
 
 // AES constants
-//
 #define aes_data(w)                                                            \
   {                                                                            \
     w(0x63), w(0x7c), w(0x77), w(0x7b), w(0xf2), w(0x6b), w(0x6f), w(0xc5),    \
@@ -97,8 +96,7 @@ static const constant ulong keccakf_rndc[24] = {
 #define aes_u2(p) aes_b2w(p, aes_f3(p), aes_f2(p), p)
 #define aes_u3(p) aes_b2w(p, p, aes_f3(p), aes_f2(p))
 
-static const constant uint aes_table[4][256] = {
-    aes_data(aes_u0), aes_data(aes_u1), aes_data(aes_u2), aes_data(aes_u3)};
+static const constant uint aes_C0[256] = aes_data(aes_u0);
 
 static const constant uint aes_sbox[256] = aes_data(aes_h0);
 
@@ -188,7 +186,7 @@ static inline uint sub_word(uint key)
 static inline void aes_genkey(global const uint *memory, uint *k)
 {
   // load first 32 bytes
-  for(size_t i = 0; i < 8; ++i) {
+  for (size_t i = 0; i < 8; ++i) {
     k[i] = memory[i];
   }
 
@@ -206,164 +204,27 @@ static inline void aes_genkey(global const uint *memory, uint *k)
   }
 }
 
-// AES-encode 16-bytes block `b`, using key `k`
-static inline uint aes_encode(const local uint *AES0, const local uint *AES1,
-                              const local uint *AES2, const local uint *AES3,
-                              const uint* k, uint *b)
+static inline uint4 aes_encode(const local uint *AES0, const local uint *AES1,
+                               const local uint *AES2, const local uint *AES3,
+                               const uint4 a, const uint *k)
 {
-  uint i0 = b[0];
-  uint i1 = b[1];
-  uint i2 = b[2];
-  uint i3 = b[3];
+  uint4 i0 = BYTE0(a);
+  uint4 i1 = BYTE1(a);
+  uint4 i2 = BYTE2(a);
+  uint4 i3 = BYTE3(a);
 
-  b[0] = AES0[BYTE0(i0)] ^ AES1[BYTE1(i1)] ^ AES2[BYTE2(i2)] ^ AES3[BYTE3(i3)] ^ k[0];
-  b[1] = AES0[BYTE0(i1)] ^ AES1[BYTE1(i2)] ^ AES2[BYTE2(i3)] ^ AES3[BYTE3(i0)] ^ k[1];
-  b[2] = AES0[BYTE0(i2)] ^ AES1[BYTE1(i3)] ^ AES2[BYTE2(i0)] ^ AES3[BYTE3(i1)] ^ k[2];
-  b[3] = AES0[BYTE0(i3)] ^ AES1[BYTE1(i0)] ^ AES2[BYTE2(i1)] ^ AES3[BYTE3(i2)] ^ k[3];
-}
+  uint4 x = {AES0[i0.s0] ^ AES1[i1.s1] ^ AES2[i2.s2] ^ AES3[i3.s3] ^ k[0],
+             AES0[i0.s1] ^ AES1[i1.s2] ^ AES2[i2.s3] ^ AES3[i3.s0] ^ k[1],
+             AES0[i0.s2] ^ AES1[i1.s3] ^ AES2[i2.s0] ^ AES3[i3.s1] ^ k[2],
+             AES0[i0.s3] ^ AES1[i1.s0] ^ AES2[i2.s1] ^ AES3[i3.s2] ^ k[3]};
 
-static inline void explode_scratchpad(const local uint *AES0, const local uint *AES1,
-                                      const local uint *AES2, const local uint *AES3,
-                                      global uint *state, global uint *scratchpad)
-{
-  uint k[40];
-
-  // bytes 0..31 of the Keccak final state are
-  // interpreted as an AES-256 key and expanded to 10 round keys.
-  aes_genkey(state, k);
-
-  // The bytes 64..191
-  // are extracted from the Keccak final state and split into 8 blocks of
-  // 16 bytes each.
-
-  // Each block is encrypted using the following procedure
-  // `block = aes_round(block, round_keys[i])`
-  for(size_t b = 0; b < 8; ++b) {
-    uint xin[4];
-    uint offs = (4 + b) << 2;
-    xin[0] =  state[offs + 0];
-    xin[1] =  state[offs + 1];
-    xin[2] =  state[offs + 2];
-    xin[3] =  state[offs + 3];
-
-    for (size_t i = b; i < CRYPTONIGHT_MEMORY_UINT4; i += 8) {
-      for(size_t j = 0; j < 40; j += 4) {
-        aes_encode(AES0, AES1, AES2, AES3, k + j, xin);
-      }
-      offs = i << 2;
-      scratchpad[offs + 0] = xin[0];
-      scratchpad[offs + 1] = xin[1];
-      scratchpad[offs + 2] = xin[2];
-      scratchpad[offs + 3] = xin[3];
-    }
-  }
-}
-
-static inline size_t to_scratchpad_address(ulong v)
-{
-  return (v & CRYPTONIGHT_MASK) >> 2;
-}
-
-static inline void memory_hard_loop(const local uint *AES0, const local uint *AES1,
-                                    const local uint *AES2, const local uint *AES3,
-                                    ulong* X, global uint *scratchpad)
-{
-  uint *X32 = (uint*)X;
-  uint cx[4];
-
-  for (size_t i = 0; i < CRYPTONIGHT_ITERATIONS; ++i) {
-    // addr = to_scratchpad_address(a)
-    const size_t idx_a = to_scratchpad_address(X[0]);
-
-    // scratchpad[addr] = aes_round(scratchpad[addr], a)
-    cx[0] = scratchpad[idx_a + 0];
-    cx[1] = scratchpad[idx_a + 1];
-    cx[2] = scratchpad[idx_a + 2];
-    cx[3] = scratchpad[idx_a + 3];
-    aes_encode(AES0, AES1, AES2, AES3, X32, cx);
-
-    // b, scratchpad[addr] = scratchpad[addr], b ^ scratchpad[addr]
-    scratchpad[idx_a + 0] = cx[0] ^ X32[4];
-    scratchpad[idx_a + 1] = cx[1] ^ X32[5];
-    scratchpad[idx_a + 2] = cx[2] ^ X32[6];
-    scratchpad[idx_a + 3] = cx[3] ^ X32[7];
-
-    //
-    X32[4] = cx[0];
-    X32[5] = cx[1];
-    X32[6] = cx[2];
-    X32[7] = cx[3];
-
-    // addr = to_scratchpad_address(b)
-    const size_t idx_b = to_scratchpad_address(X[2]);
-
-    // a = 8byte_add(a, 8byte_mul(b, scratchpad[addr]))
-    cx[0] = scratchpad[idx_b + 0];
-    cx[1] = scratchpad[idx_b + 1];
-    cx[2] = scratchpad[idx_b + 2];
-    cx[3] = scratchpad[idx_b + 3];
-
-    ulong c0 = *(ulong*)cx;
-    X[1] += X[2] * c0;
-    X[0] += mul_hi(X[2], c0);
-
-    // a, scratchpad[addr] = a ^ scratchpad[addr], a
-    scratchpad[idx_b + 0] = X32[0];
-    scratchpad[idx_b + 1] = X32[1];
-    scratchpad[idx_b + 2] = X32[2];
-    scratchpad[idx_b + 3] = X32[3];
-
-    X32[0] ^= cx[0];
-    X32[1] ^= cx[1];
-    X32[2] ^= cx[2];
-    X32[3] ^= cx[3];
-  }
-}
-
-static inline void implode_scratchpad(const local uint *AES0, const local uint *AES1,
-                                     const local uint *AES2, const local uint *AES3,
-                                     global uint *state, global uint *scratchpad)
-{
-  uint k[40];
-  // bytes 32..63 of the Keccak final state are
-  // interpreted as an AES-256 key and expanded to 10 round keys.
-  aes_genkey(state + 8, k);
-
-  // Then the result is encrypted in
-  // the same manner as in the `explode_scratchpad`,
-  // but using the new keys. The
-  // result is XORed with the first 128 bytes from the scratchpad,
-  // encrypted again, and so on.
-  for (size_t b = 0; b < 8; ++b) {
-    // Bytes 64..191 are extracted from the Keccak state
-    uint xout[4];
-    uint offs = (4 + b) << 2;
-    xout[0] = state[offs + 0];
-    xout[1] = state[offs + 1];
-    xout[2] = state[offs + 2];
-    xout[3] = state[offs + 3];
-
-    for (size_t i = b; i < CRYPTONIGHT_MEMORY_UINT4; i += 8) {
-      offs = i << 2;
-      xout[0] ^= scratchpad[offs + 0];
-      xout[1] ^= scratchpad[offs + 1];
-      xout[2] ^= scratchpad[offs + 2];
-      xout[3] ^= scratchpad[offs + 3];
-      for(size_t j = 0; j < 40; j += 4) {
-        aes_encode(AES0, AES1, AES2, AES3, k + j, xout);
-      }
-    }
-    offs = (4 + b) << 2;
-    state[offs + 0] = xout[0];
-    state[offs + 1] = xout[1];
-    state[offs + 2] = xout[2];
-    state[offs + 3] = xout[3];
-  }
+  return x;
 }
 
 #define INPUT_SIZE_ULONG                                                       \
   (INPUT_HASH_SIZE / sizeof(ulong)) /* 11x8 == 88 bytes */
 #define HASH_STATE_SIZE_ULONG (HASH_STATE_SIZE / sizeof(ulong))
+#define HASH_STATE_SIZE_UINT (HASH_STATE_SIZE / sizeof(uint))
 
 static inline void hash_state_init_with_nonce(global const ulong *input,
                                               const uint nonce,
@@ -387,15 +248,10 @@ static inline void hash_state_init_with_nonce(global const ulong *input,
   hash_state[16] = 0x8000000000000000UL;
 }
 
-// input always 11x8 byte elements (88 bytes)
-kernel void cryptonight(global const ulong *input,
-                        global uint *scratchpad_begin,
-                        global ulong *output)
+kernel void cn_init(global const ulong *input, global ulong *output)
 {
   const size_t work_id = get_global_id(0) - get_global_offset(0);
 
-  global uint *scratchpad =
-      scratchpad_begin + work_id * CRYPTONIGHT_MEMORY_UINT;
   global ulong *hash_state = output + work_id * HASH_STATE_SIZE_ULONG;
 
   uint nonce = get_global_id(0);
@@ -405,36 +261,158 @@ kernel void cryptonight(global const ulong *input,
 
   // run keccak on input hash
   keccakf1600(hash_state);
+}
+
+__attribute__((reqd_work_group_size(WORKSIZE, 8, 1)))
+kernel void
+cn_explode(global uint *scratchpad_begin, global uint *output)
+{
+  const size_t work_id = get_global_id(0) - get_global_offset(0);
+
+  global uint *state = (output + work_id * HASH_STATE_SIZE_UINT);
+
+  global uint *scratchpad =
+      scratchpad_begin + work_id * CRYPTONIGHT_MEMORY_UINT;
 
   local uint AES0[256], AES1[256], AES2[256], AES3[256];
-  for (size_t i = get_local_id(0) ; i < 256; i += get_local_size(0)) {
-      const uint tmp = aes_table[0][i];
-      AES0[i] = tmp;
-      AES1[i] = rotate(tmp, 8U);
-      AES2[i] = rotate(tmp, 16U);
-      AES3[i] = rotate(tmp, 24U);
+  for (size_t i = get_local_id(0); i < 256; i += get_local_size(0)) {
+    const uint tmp = aes_C0[i];
+    AES0[i] = tmp;
+    AES1[i] = rotate(tmp, 8U);
+    AES2[i] = rotate(tmp, 16U);
+    AES3[i] = rotate(tmp, 24U);
   }
   barrier(CLK_LOCAL_MEM_FENCE);
 
-  // init scratchpad
-  explode_scratchpad(AES0, AES1, AES2, AES3, (global uint *)hash_state, scratchpad);
+  uint k[40];
+
+  // bytes 0..31 of the Keccak final state are
+  // interpreted as an AES-256 key and expanded to 10 round keys.
+  aes_genkey(state, k);
+
+  // The bytes 64..191
+  // are extracted from the Keccak final state and split into 8 blocks of
+  // 16 bytes each.
+
+  // Each block is encrypted using the following procedure
+  // `block = aes_round(block, round_keys[i])`
+  size_t b = get_global_id(1);
+
+  uint4 xin = vload4(4 + b, state);
+  ;
+  for (size_t i = b; i < CRYPTONIGHT_MEMORY_UINT4; i += 8) {
+    for (size_t j = 0; j < 40; j += 4) {
+      xin = aes_encode(AES0, AES1, AES2, AES3, xin, k + j);
+    }
+    vstore4(xin, i, scratchpad);
+  }
+}
+
+#define TO_IDX(v) ((v & CRYPTONIGHT_MASK) >> 4)
+
+kernel void
+cn_memloop(global uint *scratchpad_begin, global uint *output)
+{
+  const size_t work_id = get_global_id(0) - get_global_offset(0);
+
+  global uint *state = output + work_id * HASH_STATE_SIZE_UINT;
+
+  global uint *scratchpad =
+      scratchpad_begin + work_id * CRYPTONIGHT_MEMORY_UINT;
+
+  local uint AES0[256], AES1[256], AES2[256], AES3[256];
+  for (size_t i = get_local_id(0); i < 256; i += get_local_size(0)) {
+    const uint tmp = aes_C0[i];
+    AES0[i] = tmp;
+    AES1[i] = rotate(tmp, 8U);
+    AES2[i] = rotate(tmp, 16U);
+    AES3[i] = rotate(tmp, 24U);
+  }
+  barrier(CLK_LOCAL_MEM_FENCE);
 
   // Bytes 0..31 and 32..63 of the Keccak state
   // are XORed, and the resulting 32 bytes are used to initialize
   // variables a and b, 16 bytes each.
-  ulong x0[4] = {
-    hash_state[0] ^ hash_state[4],
-    hash_state[1] ^ hash_state[5],
-    hash_state[2] ^ hash_state[6],
-    hash_state[3] ^ hash_state[7]};
+
+  union {
+    struct {
+      uint4 a, b;
+    };
+    struct {
+      ulong a0, a1, b0, b1;
+    };
+  } X = {.a = vload4(0, state) ^ vload4(2, state),
+         .b = vload4(1, state) ^ vload4(3, state)};
 
   // run main cryptonight loop
-  memory_hard_loop(AES0, AES1, AES2, AES3, x0, scratchpad);
+  for (size_t i = 0; i < CRYPTONIGHT_ITERATIONS; ++i) {
+    // addr = to_scratchpad_address(a)
+    const size_t idx_a = TO_IDX(X.a0);
 
-  // implode scratchpad
-  implode_scratchpad(AES0, AES1, AES2, AES3, (global uint *)hash_state, scratchpad);
+    // scratchpad[addr] = aes_round(scratchpad[addr], a)
+    uint4 cx = aes_encode(AES0, AES1, AES2, AES3, vload4(idx_a, scratchpad),
+                          (uint *)&X.a);
+    // b, scratchpad[addr] = scratchpad[addr], b ^ scratchpad[addr]
+    vstore4(cx ^ X.b, idx_a, scratchpad);
+    X.b = cx;
 
-  // keccak of 24 bytes of final hash
-  keccakf1600(hash_state);
+    // addr = to_scratchpad_address(b)
+    const size_t idx_b = TO_IDX(X.b0);
+
+    // a = 8byte_add(a, 8byte_mul(b, scratchpad[addr]))
+    cx = vload4(idx_b, scratchpad);
+    ulong c0 = as_ulong2(cx).s0;
+    X.a1 += X.b0 * c0;
+    X.a0 += mul_hi(X.b0, c0);
+
+    // a, scratchpad[addr] = a ^ scratchpad[addr], a
+    vstore4(X.a, idx_b, scratchpad);
+    X.a ^= cx;
+  }
+}
+
+
+__attribute__((reqd_work_group_size(WORKSIZE, 8, 1)))
+kernel void
+cn_implode(global uint *scratchpad_begin, global uint *output)
+{
+  const size_t work_id = get_global_id(0) - get_global_offset(0);
+
+  global uint *state = output + work_id * HASH_STATE_SIZE_UINT;
+
+  global uint *scratchpad =
+      scratchpad_begin + work_id * CRYPTONIGHT_MEMORY_UINT;
+
+  local uint AES0[256], AES1[256], AES2[256], AES3[256];
+  for (size_t i = get_local_id(0); i < 256; i += get_local_size(0)) {
+    const uint tmp = aes_C0[i];
+    AES0[i] = tmp;
+    AES1[i] = rotate(tmp, 8U);
+    AES2[i] = rotate(tmp, 16U);
+    AES3[i] = rotate(tmp, 24U);
+  }
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  size_t b = get_global_id(1);
+  uint k[40];
+  // bytes 32..63 of the Keccak final state are
+  // interpreted as an AES-256 key and expanded to 10 round keys.
+  aes_genkey(state + 8, k);
+
+  // Then the result is encrypted in
+  // the same manner as in the `explode_scratchpad`,
+  // but using the new keys. The
+  // result is XORed with the first 128 bytes from the scratchpad,
+  // encrypted again, and so on.
+
+  // Bytes 64..191 are extracted from the Keccak state
+  uint4 xout = vload4(4 + b, state);
+  for (size_t i = b; i < CRYPTONIGHT_MEMORY_UINT4; i += 8) {
+    xout ^= vload4(i, scratchpad);
+    for (size_t j = 0; j < 40; j += 4) {
+      xout = aes_encode(AES0, AES1, AES2, AES3, xout, k + j);
+    }
+  }
+  vstore4(xout, 4 + b, state);
 }
 )==="
