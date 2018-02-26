@@ -41,7 +41,6 @@ static const constant ulong keccakf_rndc[24] = {
     0x8000000000008080, 0x0000000080000001, 0x8000000080008008};
 
 // AES constants
-//
 #define aes_data(w)                                                            \
   {                                                                            \
     w(0x63), w(0x7c), w(0x77), w(0x7b), w(0xf2), w(0x6b), w(0x6f), w(0xc5),    \
@@ -187,7 +186,7 @@ static inline uint sub_word(uint key)
 static inline void aes_genkey(global const uint *memory, uint *k)
 {
   // load first 32 bytes
-  for(size_t i = 0; i < 8; ++i) {
+  for (size_t i = 0; i < 8; ++i) {
     k[i] = memory[i];
   }
 
@@ -207,19 +206,17 @@ static inline void aes_genkey(global const uint *memory, uint *k)
 
 static inline uint4 aes_encode(const local uint *AES0, const local uint *AES1,
                                const local uint *AES2, const local uint *AES3,
-                               const uint4 a, const uint* k)
+                               const uint4 a, const uint *k)
 {
   uint4 i0 = BYTE0(a);
   uint4 i1 = BYTE1(a);
   uint4 i2 = BYTE2(a);
   uint4 i3 = BYTE3(a);
 
-  uint4 x = {
-    AES0[i0.s0] ^ AES1[i1.s1] ^ AES2[i2.s2] ^ AES3[i3.s3] ^ k[0],
-    AES0[i0.s1] ^ AES1[i1.s2] ^ AES2[i2.s3] ^ AES3[i3.s0] ^ k[1],
-    AES0[i0.s2] ^ AES1[i1.s3] ^ AES2[i2.s0] ^ AES3[i3.s1] ^ k[2],
-    AES0[i0.s3] ^ AES1[i1.s0] ^ AES2[i2.s1] ^ AES3[i3.s2] ^ k[3]
-  };
+  uint4 x = {AES0[i0.s0] ^ AES1[i1.s1] ^ AES2[i2.s2] ^ AES3[i3.s3] ^ k[0],
+             AES0[i0.s1] ^ AES1[i1.s2] ^ AES2[i2.s3] ^ AES3[i3.s0] ^ k[1],
+             AES0[i0.s2] ^ AES1[i1.s3] ^ AES2[i2.s0] ^ AES3[i3.s1] ^ k[2],
+             AES0[i0.s3] ^ AES1[i1.s0] ^ AES2[i2.s1] ^ AES3[i3.s2] ^ k[3]};
 
   return x;
 }
@@ -251,8 +248,7 @@ static inline void hash_state_init_with_nonce(global const ulong *input,
   hash_state[16] = 0x8000000000000000UL;
 }
 
-kernel void cn_init(global const ulong *input,
-                    global ulong *output)
+kernel void cn_init(global const ulong *input, global ulong *output)
 {
   const size_t work_id = get_global_id(0) - get_global_offset(0);
 
@@ -265,14 +261,11 @@ kernel void cn_init(global const ulong *input,
 
   // run keccak on input hash
   keccakf1600(hash_state);
-
 }
 
-#ifdef WORKSIZE
 __attribute__((reqd_work_group_size(WORKSIZE, 8, 1)))
-#endif
-kernel void cn_explode(global uint *scratchpad_begin,
-                       global uint *output)
+kernel void
+cn_explode(global uint *scratchpad_begin, global uint *output)
 {
   const size_t work_id = get_global_id(0) - get_global_offset(0);
 
@@ -282,12 +275,12 @@ kernel void cn_explode(global uint *scratchpad_begin,
       scratchpad_begin + work_id * CRYPTONIGHT_MEMORY_UINT;
 
   local uint AES0[256], AES1[256], AES2[256], AES3[256];
-  for (size_t i = get_local_id(0) ; i < 256; i += get_local_size(0)) {
-      const uint tmp = aes_C0[i];
-      AES0[i] = tmp;
-      AES1[i] = rotate(tmp, 8U);
-      AES2[i] = rotate(tmp, 16U);
-      AES3[i] = rotate(tmp, 24U);
+  for (size_t i = get_local_id(0); i < 256; i += get_local_size(0)) {
+    const uint tmp = aes_C0[i];
+    AES0[i] = tmp;
+    AES1[i] = rotate(tmp, 8U);
+    AES2[i] = rotate(tmp, 16U);
+    AES3[i] = rotate(tmp, 24U);
   }
   barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -305,9 +298,10 @@ kernel void cn_explode(global uint *scratchpad_begin,
   // `block = aes_round(block, round_keys[i])`
   size_t b = get_global_id(1);
 
-  uint4 xin = vload4(4 + b, state);;
+  uint4 xin = vload4(4 + b, state);
+  ;
   for (size_t i = b; i < CRYPTONIGHT_MEMORY_UINT4; i += 8) {
-    for(size_t j = 0; j < 40; j += 4) {
+    for (size_t j = 0; j < 40; j += 4) {
       xin = aes_encode(AES0, AES1, AES2, AES3, xin, k + j);
     }
     vstore4(xin, i, scratchpad);
@@ -316,11 +310,8 @@ kernel void cn_explode(global uint *scratchpad_begin,
 
 #define TO_IDX(v) ((v & CRYPTONIGHT_MASK) >> 4)
 
-#ifdef WORKSIZE
-__attribute__((reqd_work_group_size(WORKSIZE, 1, 1)))
-#endif
-kernel void cn_memloop(global uint *scratchpad_begin,
-                       global uint *output)
+kernel void
+cn_memloop(global uint *scratchpad_begin, global uint *output)
 {
   const size_t work_id = get_global_id(0) - get_global_offset(0);
 
@@ -330,12 +321,12 @@ kernel void cn_memloop(global uint *scratchpad_begin,
       scratchpad_begin + work_id * CRYPTONIGHT_MEMORY_UINT;
 
   local uint AES0[256], AES1[256], AES2[256], AES3[256];
-  for (size_t i = get_local_id(0) ; i < 256; i += get_local_size(0)) {
-      const uint tmp = aes_C0[i];
-      AES0[i] = tmp;
-      AES1[i] = rotate(tmp, 8U);
-      AES2[i] = rotate(tmp, 16U);
-      AES3[i] = rotate(tmp, 24U);
+  for (size_t i = get_local_id(0); i < 256; i += get_local_size(0)) {
+    const uint tmp = aes_C0[i];
+    AES0[i] = tmp;
+    AES1[i] = rotate(tmp, 8U);
+    AES2[i] = rotate(tmp, 16U);
+    AES3[i] = rotate(tmp, 24U);
   }
   barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -350,10 +341,8 @@ kernel void cn_memloop(global uint *scratchpad_begin,
     struct {
       ulong a0, a1, b0, b1;
     };
-  } X = {
-     .a = vload4(0, state) ^ vload4(2, state),
-     .b = vload4(1, state) ^ vload4(3, state)
-  };
+  } X = {.a = vload4(0, state) ^ vload4(2, state),
+         .b = vload4(1, state) ^ vload4(3, state)};
 
   // run main cryptonight loop
   for (size_t i = 0; i < CRYPTONIGHT_ITERATIONS; ++i) {
@@ -361,7 +350,8 @@ kernel void cn_memloop(global uint *scratchpad_begin,
     const size_t idx_a = TO_IDX(X.a0);
 
     // scratchpad[addr] = aes_round(scratchpad[addr], a)
-    uint4 cx = aes_encode(AES0, AES1, AES2, AES3, vload4(idx_a, scratchpad), (uint*)&X.a);
+    uint4 cx = aes_encode(AES0, AES1, AES2, AES3, vload4(idx_a, scratchpad),
+                          (uint *)&X.a);
     // b, scratchpad[addr] = scratchpad[addr], b ^ scratchpad[addr]
     vstore4(cx ^ X.b, idx_a, scratchpad);
     X.b = cx;
@@ -381,11 +371,10 @@ kernel void cn_memloop(global uint *scratchpad_begin,
   }
 }
 
-#ifdef WORKSIZE
+
 __attribute__((reqd_work_group_size(WORKSIZE, 8, 1)))
-#endif
-kernel void cn_implode(global uint *scratchpad_begin,
-                       global uint *output)
+kernel void
+cn_implode(global uint *scratchpad_begin, global uint *output)
 {
   const size_t work_id = get_global_id(0) - get_global_offset(0);
 
@@ -395,12 +384,12 @@ kernel void cn_implode(global uint *scratchpad_begin,
       scratchpad_begin + work_id * CRYPTONIGHT_MEMORY_UINT;
 
   local uint AES0[256], AES1[256], AES2[256], AES3[256];
-  for (size_t i = get_local_id(0) ; i < 256; i += get_local_size(0)) {
-      const uint tmp = aes_C0[i];
-      AES0[i] = tmp;
-      AES1[i] = rotate(tmp, 8U);
-      AES2[i] = rotate(tmp, 16U);
-      AES3[i] = rotate(tmp, 24U);
+  for (size_t i = get_local_id(0); i < 256; i += get_local_size(0)) {
+    const uint tmp = aes_C0[i];
+    AES0[i] = tmp;
+    AES1[i] = rotate(tmp, 8U);
+    AES2[i] = rotate(tmp, 16U);
+    AES3[i] = rotate(tmp, 24U);
   }
   barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -420,11 +409,10 @@ kernel void cn_implode(global uint *scratchpad_begin,
   uint4 xout = vload4(4 + b, state);
   for (size_t i = b; i < CRYPTONIGHT_MEMORY_UINT4; i += 8) {
     xout ^= vload4(i, scratchpad);
-    for(size_t j = 0; j < 40; j += 4) {
+    for (size_t j = 0; j < 40; j += 4) {
       xout = aes_encode(AES0, AES1, AES2, AES3, xout, k + j);
     }
   }
   vstore4(xout, 4 + b, state);
 }
-
 )==="

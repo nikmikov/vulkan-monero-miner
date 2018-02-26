@@ -168,6 +168,9 @@ void monero_solver_work_thread(void *arg)
       if (success) {
         atomic_fetch_add(&solver->hashes_counter, nonces_processed);
         nonce += nonces_processed;
+      } else {
+        // processing error, bail on this job and wait for the next one
+        nonce = nonce_to = 0;
       }
     } else {
       // SLEEP: NO JOB AVAILABLE
