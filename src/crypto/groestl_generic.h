@@ -121,7 +121,7 @@ static inline void RND512Q(uint8_t *x, uint32_t *y, uint32_t r)
 static inline void groestl_tf512(uint64_t *hash, const uint8_t *memory)
 {
   uint32_t *h = (uint32_t *)hash;
-  uint32_t *m = (uint32_t*)memory;
+  uint32_t *m = (uint32_t *)memory;
   int i;
   uint32_t Ptmp[2 * GROESTL256_COLS];
   uint32_t Qtmp[2 * GROESTL256_COLS];

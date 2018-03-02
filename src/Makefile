@@ -16,7 +16,7 @@ INSTALL_BIN=$(PREFIX)/bin
 INSTALL=install
 BUILDDIR=../build
 
-FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DBG)  -march=native $(CFLAGS) -I ./
+FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DBG) -march=native $(CFLAGS) -I ./
 FINAL_LDFLAGS=$(LDFLAGS) $(DBG) -luv
 FINAL_LIBS=-lm
 DEBUG=-g -ggdb

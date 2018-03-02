@@ -4,8 +4,8 @@
 #include <stdalign.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <x86intrin.h>
 
+#include "crypto/aes.h"
 #include "crypto/blake.h"
 #include "crypto/groestl.h"
 #include "crypto/jh.h"
@@ -24,16 +24,15 @@ struct cryptonight_ctx {
   alignas(16) uint8_t hash_state[200];
   bool is_hugepages_mem;
   bool is_mlocked_mem;
-  //  uint8_t ctx_info[24];    // Use some of the extra memory for flags
 };
 
 #define AES_GENKEY_SUB(rcon, xout0, xout2)                                     \
   {                                                                            \
-    __m128i xout1 = _mm_aeskeygenassist_si128(xout2, (uint8_t)rcon);           \
+    __m128i xout1 = aes_keygenassist(xout2, (uint8_t)rcon);                    \
     xout1 = _mm_shuffle_epi32(xout1, 0xFF);                                    \
     xout0 = sl_xor(xout0);                                                     \
     xout0 = _mm_xor_si128(xout0, xout1);                                       \
-    xout1 = _mm_aeskeygenassist_si128(xout0, 0x00);                            \
+    xout1 = aes_keygenassist(xout0, 0x00);                                     \
     xout1 = _mm_shuffle_epi32(xout1, 0xAA);                                    \
     xout2 = sl_xor(xout2);                                                     \
     xout2 = _mm_xor_si128(xout2, xout1);                                       \
@@ -64,14 +63,14 @@ static inline void aes_round(__m128i key, __m128i *x0, __m128i *x1, __m128i *x2,
                              __m128i *x3, __m128i *x4, __m128i *x5, __m128i *x6,
                              __m128i *x7)
 {
-  *x0 = _mm_aesenc_si128(*x0, key);
-  *x1 = _mm_aesenc_si128(*x1, key);
-  *x2 = _mm_aesenc_si128(*x2, key);
-  *x3 = _mm_aesenc_si128(*x3, key);
-  *x4 = _mm_aesenc_si128(*x4, key);
-  *x5 = _mm_aesenc_si128(*x5, key);
-  *x6 = _mm_aesenc_si128(*x6, key);
-  *x7 = _mm_aesenc_si128(*x7, key);
+  *x0 = aes_encode(*x0, key);
+  *x1 = aes_encode(*x1, key);
+  *x2 = aes_encode(*x2, key);
+  *x3 = aes_encode(*x3, key);
+  *x4 = aes_encode(*x4, key);
+  *x5 = aes_encode(*x5, key);
+  *x6 = aes_encode(*x6, key);
+  *x7 = aes_encode(*x7, key);
 }
 
 static inline void aes_genkey(const __m128i *memory, __m128i *k0, __m128i *k1,
@@ -240,7 +239,7 @@ void cryptonight_aesni(const uint8_t *input, size_t input_size,
   for (size_t i = 0; i < CRYPTONIGHT_ITERATIONS; ++i) {
     __m128i cx;
     cx = _mm_load_si128((__m128i *)&l0[idx0 & CRYPTONIGHT_MASK]);
-    cx = _mm_aesenc_si128(cx, _mm_set_epi64x(ah0, al0));
+    cx = aes_encode(cx, _mm_set_epi64x(ah0, al0));
 
     _mm_store_si128((__m128i *)&l0[idx0 & CRYPTONIGHT_MASK],
                     _mm_xor_si128(bx0, cx));
