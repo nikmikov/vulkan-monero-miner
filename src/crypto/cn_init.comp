@@ -1,0 +1,40 @@
+/** Compute shader for first stage of cryptonight */
+#version 430 core
+
+#define INPUT_HASH_SIZE_UINT 22 /** 88 bytes */
+
+#define HASH_STATE_SIZE_UINT 50 /** 200 bytes */
+
+layout(binding = 0) uniform readonly In {
+  uint start_nonce;
+  uint input_hash[INPUT_HASH_SIZE_UINT];
+};
+
+layout(binding = 1) buffer writeonly Out {
+  uint hash_state[];
+};
+
+void main()
+{
+  uint index = gl_GlobalInvocationID.x;
+
+  uint state_index = index * HASH_STATE_SIZE_UINT;
+
+  for (uint i = 0; i < INPUT_HASH_SIZE_UINT; ++i) {
+    hash_state[state_index + i] = input_hash[i];
+  }
+
+  uint nonce = start_nonce + index;
+
+  hash_state[state_index +  9] &= 0x00FFFFFFU;
+  hash_state[state_index +  9] |= (nonce & 0xFF) << 24;
+  hash_state[state_index + 10] &= 0xFF000000U;
+  hash_state[state_index + 10] |= (nonce >> 8);
+
+  for (uint i = INPUT_HASH_SIZE_UINT; i < HASH_STATE_SIZE_UINT ; ++i) {
+    hash_state[state_index + i] = 0;
+  }
+
+  // Last bit of padding
+  hash_state[32] = 0x80000000;
+}
