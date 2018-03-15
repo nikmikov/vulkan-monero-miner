@@ -24,6 +24,7 @@ struct monero_solver_metrics {
   uint64_t top_10_solutions[10];
 };
 
+
 typedef void (*monero_solver_submit)(int solver_id,
                                      struct monero_solution *solution,
                                      void *data);
@@ -51,13 +52,17 @@ void monero_solver_work(struct monero_solver *ptr, monero_solver_submit submit,
 void monero_solver_get_metrics(struct monero_solver *,
                                struct monero_solver_metrics *);
 
-/** new monero cpu kernel */
+/** new monero cpu solver */
 struct monero_solver *
 monero_solver_new_cpu(const struct monero_config_solver_cpu *cfg);
 
-/** new monero opencl kernel */
+/** new monero opencl solver */
 struct monero_solver *
 monero_solver_new_cl(const struct monero_config_solver_cl *cfg);
+
+/** new monero vulkan solver */
+struct monero_solver *
+monero_solver_new_vk(const struct monero_config_solver_vk *cfg);
 
 bool monero_solver_init(const struct monero_config_solver *,
                         struct monero_solver *);

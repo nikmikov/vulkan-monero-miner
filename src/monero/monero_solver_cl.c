@@ -97,7 +97,7 @@ bool monero_solver_cl_set_job(struct monero_solver *ptr,
                               const uint64_t target, uint8_t *output_hash,
                               uint32_t *output_nonces, size_t *output_num)
 {
-  if (input_hash_len > 84) {
+  if (input_hash_len > MONERO_INPUT_HASH_LEN) {
     return false;
   }
   struct monero_solver_cl *solver = (struct monero_solver_cl *)ptr;
@@ -236,7 +236,7 @@ int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from)
     }
 
     // compare against CPU version
-#define __VERIFY_CL_
+//#define __VERIFY_CL_
 #ifdef __VERIFY_CL_
     log_debug("Verifying results");
     printf("+++: %d\n", final_hash_idx);

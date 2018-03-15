@@ -3,10 +3,11 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
+#include <vulkan/vulkan.h>
 
 #include "logging.h"
 #include "resources.h"
-#include <vulkan/vulkan.h>
 
 #define NUM_COMPUTE_PIPELINES 2
 #define NUM_BUFFERS 3
@@ -19,6 +20,8 @@ struct monero_solver_vk_context {
   VkDevice device;
   VkQueue queue;
   VkCommandPool cmd_pool;
+  VkCommandBuffer cmd_buffer;
+  VkDescriptorPool descriptor_pool;
 
   // memory and buffers
   VkDeviceMemory memory;
@@ -27,6 +30,7 @@ struct monero_solver_vk_context {
   // shaders
   VkShaderModule compute_shader[NUM_COMPUTE_PIPELINES];
   VkDescriptorSetLayout descriptor_set_layout[NUM_COMPUTE_PIPELINES];
+  VkDescriptorSet descriptor_set[NUM_COMPUTE_PIPELINES];
   VkPipelineLayout pipeline_layout[NUM_COMPUTE_PIPELINES];
   VkPipeline pipeline[NUM_COMPUTE_PIPELINES];
 };
@@ -36,6 +40,17 @@ struct monero_solver_vk {
 
   /** Vulkan Context */
   struct monero_solver_vk_context *vk;
+
+  /** parallelizm */
+  size_t parallelism;
+
+  /** Job params */
+  const uint8_t *input_hash;
+  size_t input_hash_len;
+  uint64_t target;
+  uint8_t *output_hash;
+  uint32_t *output_nonces;
+  size_t *output_num;
 };
 
 struct monero_solver_vk_context *
@@ -49,8 +64,105 @@ bool monero_solver_vk_context_prepare_pipelines(
 bool monero_solver_vk_context_prepare_buffers(
     struct monero_solver_vk_context *vk, size_t nthreads);
 
+bool monero_solver_vk_context_prepare_command_buffer(
+    struct monero_solver_vk_context *vk, size_t parallelism);
+
+void monero_solver_vk_free(struct monero_solver *ptr)
+{
+  struct monero_solver_vk *solver = (struct monero_solver_vk *)ptr;
+
+  if (solver->vk != NULL) {
+    monero_solver_vk_context_release(solver->vk);
+  }
+
+  free(ptr);
+}
+
+bool monero_solver_vk_set_job(struct monero_solver *ptr,
+                              const uint8_t *input_hash, size_t input_hash_len,
+                              const uint64_t target, uint8_t *output_hash,
+                              uint32_t *output_nonces, size_t *output_num)
+{
+  if (input_hash_len > MONERO_INPUT_HASH_LEN) {
+    return false;
+  }
+  struct monero_solver_vk *solver = (struct monero_solver_vk *)ptr;
+  struct monero_solver_vk_context *vk = solver->vk;
+  solver->input_hash = input_hash;
+  solver->input_hash_len = input_hash_len;
+  solver->target = target;
+  solver->output_hash = output_hash;
+  solver->output_nonces = output_nonces;
+  solver->output_num = output_num;
+
+  struct {
+    uint32_t nonce;
+    uint8_t hash[MONERO_INPUT_HASH_LEN];
+  } input_data = {0};
+
+  memcpy(input_data.hash, input_hash, input_hash_len);
+  // padding
+  if (input_hash_len < MONERO_INPUT_HASH_LEN) {
+    const size_t zero_from = input_hash_len + 1;
+    memset(input_data.hash + zero_from, 0, MONERO_INPUT_HASH_LEN - zero_from);
+    input_data.hash[input_hash_len] = 0x01;
+  }
+
+  // copy memory to GPU
+  void *input_buffer;
+  VkResult vk_res = vkMapMemory(vk->device, vk->memory, 0, sizeof(input_data),
+                                0, &input_buffer);
+
+  if (vk_res != VK_SUCCESS) {
+    log_error("Error when calling vkMapMemory(%lu) for input buffer: %d",
+              sizeof(input_data), (int)vk_res);
+    return false;
+  }
+
+  memcpy(input_buffer, &input_data, sizeof(input_data));
+
+  // unmap
+  vkUnmapMemory(vk->device, vk->memory);
+
+  return true;
+}
+
+int monero_solver_vk_process(struct monero_solver *ptr, uint32_t nonce_from)
+{
+  struct monero_solver_vk *solver = (struct monero_solver_vk *)ptr;
+  struct monero_solver_vk_context *vk = solver->vk;
+  uint32_t *input_buffer;
+  VkResult vk_res = vkMapMemory(vk->device, vk->memory, 0, sizeof(uint32_t), 0,
+                                (void *)&input_buffer);
+
+  if (vk_res != VK_SUCCESS) {
+    log_error("Error when calling vkMapMemory for input buffer");
+    return false;
+  }
+  *input_buffer = nonce_from;
+  vkUnmapMemory(vk->device, vk->memory);
+
+  VkSubmitInfo submit_info = {
+      VK_STRUCTURE_TYPE_SUBMIT_INFO, 0, 0, 0, 0, 1, &vk->cmd_buffer, 0, 0};
+
+  vk_res = vkQueueSubmit(vk->queue, 1, &submit_info, 0);
+  if (vk_res != VK_SUCCESS) {
+    log_error("Error when calling vkQueueSubmit");
+    return false;
+  }
+
+  log_info("Waiting for queue");
+  vk_res = vkQueueWaitIdle(vk->queue);
+  if (vk_res != VK_SUCCESS) {
+    log_error("Error when calling vkQueueWaitIdle");
+    return false;
+  }
+
+  return solver->parallelism;
+}
+
 struct monero_solver *
-monero_solver_new_vk(const struct monero_config_solver_cl *cfg)
+monero_solver_new_vk(const struct monero_config_solver_vk *cfg)
 {
   assert(cfg != NULL);
   assert(cfg->device_id >= 0);
@@ -63,7 +175,7 @@ monero_solver_new_vk(const struct monero_config_solver_cl *cfg)
   }
 
   // init memory buffers
-  if (!monero_solver_vk_context_prepare_buffers(vk_ctx, cfg->intensity)) {
+  if (!monero_solver_vk_context_prepare_buffers(vk_ctx, cfg->parallelism)) {
     log_error("Error when initializing memory buffers");
     monero_solver_vk_context_release(vk_ctx);
     return NULL;
@@ -76,10 +188,22 @@ monero_solver_new_vk(const struct monero_config_solver_cl *cfg)
     return NULL;
   }
 
+  // init command buffer
+  if (!monero_solver_vk_context_prepare_command_buffer(vk_ctx,
+                                                       cfg->parallelism)) {
+    log_error("Error when initializing command buffers");
+    monero_solver_vk_context_release(vk_ctx);
+    return NULL;
+  }
+
   struct monero_solver_vk *solver_vk =
       calloc(1, sizeof(struct monero_solver_vk));
 
   solver_vk->vk = vk_ctx;
+  solver_vk->parallelism = cfg->parallelism;
+  solver_vk->solver.set_job = monero_solver_vk_set_job;
+  solver_vk->solver.process = monero_solver_vk_process;
+  solver_vk->solver.free = monero_solver_vk_free;
 
   if (monero_solver_init(&cfg->solver, &solver_vk->solver)) {
     return &solver_vk->solver;
@@ -214,6 +338,18 @@ monero_solver_vk_context_init(uint32_t device_idx)
     goto ERROR;
   }
 
+  VkCommandBufferAllocateInfo command_buffer_allocate_info = {
+      VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, 0, ctx->cmd_pool,
+      VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1};
+
+  vk_res = vkAllocateCommandBuffers(ctx->device, &command_buffer_allocate_info,
+                                    &ctx->cmd_buffer);
+
+  if (vk_res != VK_SUCCESS) {
+    log_error("Error when calling vkAllocateCommandBuffers");
+    goto ERROR;
+  }
+
   return ctx;
 
 ERROR:
@@ -225,6 +361,9 @@ void monero_solver_vk_context_release(struct monero_solver_vk_context *ctx)
 {
   assert(ctx != NULL);
 
+  if (ctx->descriptor_pool != NULL) {
+    vkDestroyDescriptorPool(ctx->device, ctx->descriptor_pool, NULL);
+  }
   for (size_t i = 0; i < NUM_COMPUTE_PIPELINES; ++i) {
     if (ctx->descriptor_set_layout[i] != NULL) {
       vkDestroyDescriptorSetLayout(ctx->device, ctx->descriptor_set_layout[i],
@@ -304,10 +443,10 @@ bool monero_solver_vk_context_prepare_buffers(
     VkDeviceSize heap_size =
         properties.memoryHeaps[properties.memoryTypes[k].heapIndex].size;
 
-    bool is_device_local = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT &
+    bool is_host_visible = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT &
                            properties.memoryTypes[k].propertyFlags;
 
-    if (is_device_local && heap_size >= required_memory_size) {
+    if (is_host_visible && heap_size >= required_memory_size) {
       log_debug("Found suitable memory @index: %u", k);
       memory_type_index = k;
       break;
@@ -444,5 +583,102 @@ bool monero_solver_vk_context_prepare_pipelines(
     }
   }
 
+  return true;
+}
+
+bool monero_solver_vk_context_prepare_command_buffer(
+    struct monero_solver_vk_context *vk, size_t parallelism)
+{
+  VkResult vk_res;
+
+  VkDescriptorPoolSize descriptor_pool_size[2] = {
+      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3}};
+
+  VkDescriptorPoolCreateInfo descriptor_pool_create_info = {
+      VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+      NULL,
+      0,
+      NUM_COMPUTE_PIPELINES,
+      2,
+      descriptor_pool_size};
+
+  vk_res = vkCreateDescriptorPool(vk->device, &descriptor_pool_create_info, 0,
+                                  &vk->descriptor_pool);
+  if (vk_res != VK_SUCCESS) {
+    log_error("Error when calling vkCreateDescriptorPool");
+    return false;
+  }
+
+  // populate descriptor set
+  VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, 0, vk->descriptor_pool,
+      NUM_COMPUTE_PIPELINES, vk->descriptor_set_layout};
+
+  vk_res = vkAllocateDescriptorSets(vk->device, &descriptor_set_allocate_info,
+                                    vk->descriptor_set);
+  if (vk_res != VK_SUCCESS) {
+    log_error("Error when calling vkAllocateDescriptorSets");
+    return false;
+  }
+
+  VkDescriptorBufferInfo buffer_desc[NUM_BUFFERS];
+  for (size_t k = 0; k < NUM_BUFFERS; ++k) {
+    buffer_desc[k].buffer = vk->buffer[k];
+    buffer_desc[k].range = VK_WHOLE_SIZE;
+    buffer_desc[k].offset = 0;
+  }
+
+  VkWriteDescriptorSet input_write_descriptor_set[2] = {
+      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, vk->descriptor_set[0], 0,
+       0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, NULL, &buffer_desc[0], NULL},
+      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, vk->descriptor_set[0], 1,
+       0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[1], NULL}};
+
+  vkUpdateDescriptorSets(vk->device, 2, input_write_descriptor_set, 0, NULL);
+
+  VkWriteDescriptorSet keccak_write_descriptor_set[2] = {
+      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, vk->descriptor_set[1], 0,
+       0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[1], NULL},
+      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, vk->descriptor_set[1], 1,
+       0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[2], NULL}};
+
+  vkUpdateDescriptorSets(vk->device, 2, keccak_write_descriptor_set, 0, NULL);
+
+  // record commands
+  vk_res = vkResetCommandBuffer(vk->cmd_buffer,
+                                VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
+  if (vk_res != VK_SUCCESS) {
+    log_error("Error when calling vkResetCommandBuffer");
+    return false;
+  }
+
+  VkCommandBufferBeginInfo command_buffer_begin_info = {
+      VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, 0,
+      VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, 0};
+
+  vk_res = vkBeginCommandBuffer(vk->cmd_buffer, &command_buffer_begin_info);
+  if (vk_res != VK_SUCCESS) {
+    log_error("Error when calling vkBeginCommandBuffer");
+    return false;
+  }
+
+  for (size_t k = 0; k < NUM_COMPUTE_PIPELINES; ++k) {
+    vkCmdBindPipeline(vk->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                      vk->pipeline[k]);
+
+    vkCmdBindDescriptorSets(vk->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                            vk->pipeline_layout[k], 0, 1,
+                            &vk->descriptor_set[k], 0, 0);
+
+    vkCmdDispatch(vk->cmd_buffer, parallelism, 1, 1);
+  }
+
+  vk_res = vkEndCommandBuffer(vk->cmd_buffer);
+
+  if (vk_res != VK_SUCCESS) {
+    log_error("Error when calling vkEndCommandBuffer");
+    return false;
+  }
   return true;
 }

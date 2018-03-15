@@ -13,7 +13,7 @@ void monero_config_solver_free(struct monero_config_solver *s)
     break;
   case MONERO_CONFIG_SOLVER_CL:
     break;
-  case MONERO_CONFIG_SOLVER_CUDA:
+  case MONERO_CONFIG_SOLVER_VK:
     break;
   }
 }
@@ -54,6 +54,47 @@ monero_config_solver_cpu_from_json(const cJSON *json)
       calloc(1, sizeof(struct monero_config_solver_cpu));
   res->solver.solver_type = MONERO_CONFIG_SOLVER_CPU;
   res->solver.affine_to_cpu = affinity;
+  return &res->solver;
+}
+
+struct monero_config_solver *
+monero_config_solver_vk_from_json(const cJSON *json)
+{
+  assert(json != NULL);
+  if (!cJSON_IsObject(json)) {
+    log_error("VK solver config is not a JSON object, %s", cJSON_Print(json));
+    return NULL;
+  }
+
+  // read affinity
+  const cJSON *json_affinity;
+  if (!json_get_object(json, "affine_to_cpu", &json_affinity)) {
+    return NULL;
+  }
+  int affinity = -1;
+  if (cJSON_IsNumber(json_affinity)) {
+    affinity = json_affinity->valueint;
+  } else if (!cJSON_IsFalse(json_affinity)) {
+    log_error("CPU affinity must be a number or `false`");
+    return NULL;
+  }
+
+  int device_id = -1, parallelism = -1;
+
+  if (!json_get_uint(json, "device", &device_id)) {
+    return NULL;
+  }
+
+  if (!json_get_uint(json, "parallelism", &parallelism)) {
+    return NULL;
+  }
+
+  struct monero_config_solver_vk *res =
+      calloc(1, sizeof(struct monero_config_solver_vk));
+  res->solver.solver_type = MONERO_CONFIG_SOLVER_VK;
+  res->solver.affine_to_cpu = affinity;
+  res->parallelism = parallelism;
+  res->device_id = device_id;
   return &res->solver;
 }
 
@@ -125,6 +166,8 @@ struct monero_config_solver *monero_config_solver_from_json(const cJSON *json)
     return monero_config_solver_cpu_from_json(json_solver);
   } else if (strcmp(type_str, "cl") == 0) {
     return monero_config_solver_cl_from_json(json_solver);
+  } else if (strcmp(type_str, "vk") == 0) {
+    return monero_config_solver_vk_from_json(json_solver);
   } else {
     log_error("Unknown solver type: %s", type_str);
   }

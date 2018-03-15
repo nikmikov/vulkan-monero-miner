@@ -7,7 +7,7 @@
 enum monero_config_solver_type {
   MONERO_CONFIG_SOLVER_CPU,
   MONERO_CONFIG_SOLVER_CL,
-  MONERO_CONFIG_SOLVER_CUDA
+  MONERO_CONFIG_SOLVER_VK
 };
 
 struct monero_config_solver {
@@ -28,8 +28,10 @@ struct monero_config_solver_cl {
   int worksize;
 };
 
-struct monero_config_solver_cuda {
+struct monero_config_solver_vk {
   struct monero_config_solver solver;
+  int device_id;
+  int parallelism;
 };
 
 struct monero_config {
