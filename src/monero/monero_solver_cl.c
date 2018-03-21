@@ -180,7 +180,8 @@ int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from)
   ret = clEnqueueNDRangeKernel(ctx->command_queue, ctx->krn_explode, 3, go, gw,
                                lw, 0, NULL, NULL);
   if (ret != CL_SUCCESS) {
-    log_error("Error when calling clEnqueueNDRangeKernel(explode): %s", cl_err_str(ret));
+    log_error("Error when calling clEnqueueNDRangeKernel(explode): %s",
+              cl_err_str(ret));
     return -1;
   }
 
@@ -235,7 +236,7 @@ int monero_solver_cl_process(struct monero_solver *ptr, uint32_t nonce_from)
       ++(*solver->output_num);
     }
 
-    // compare against CPU version
+      // compare against CPU version
 //#define __VERIFY_CL_
 #ifdef __VERIFY_CL_
     log_debug("Verifying results");
@@ -501,7 +502,8 @@ bool monero_solver_cl_context_prepare_kernel(
   }
 
   char build_options[256] = {0};
-  sprintf(build_options, "-DWORKSIZE=%d", (int)get_valid_workgroup_size(ctx, ctx->worksize, 8));
+  sprintf(build_options, "-DWORKSIZE=%d",
+          (int)get_valid_workgroup_size(ctx, ctx->worksize, 8));
   log_debug("Compiling CL kernel with options: %s", build_options);
   ret = clBuildProgram(ctx->cryptonight_program, 1, &ctx->device_id,
                        build_options, NULL, NULL);

@@ -52,7 +52,7 @@ test: $(CRYPTO_TESTS)
 .PHONY: all
 
 %.spv: %.comp
-	glslangValidator -V $< -o $@
+	glslangValidator -V110  $< -o $@
 
 %.o: %.c
 	$(DORENOM_CC) -c $< -o $@

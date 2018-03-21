@@ -24,7 +24,6 @@ struct monero_solver_metrics {
   uint64_t top_10_solutions[10];
 };
 
-
 typedef void (*monero_solver_submit)(int solver_id,
                                      struct monero_solution *solution,
                                      void *data);

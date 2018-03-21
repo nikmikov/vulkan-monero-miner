@@ -10,7 +10,9 @@
 #include "resources.h"
 
 #define NUM_COMPUTE_PIPELINES 2
-#define NUM_BUFFERS 3
+#define CRYPTONIGHT_STATE_SIZE 200
+
+enum BUFFERS { INPUT_BUFFER = 0, STATE_BUFFER, SCRATCHPAD_BUFFER, NUM_BUFFERS };
 
 struct monero_solver_vk_context {
   uint32_t device_idx;
@@ -20,12 +22,13 @@ struct monero_solver_vk_context {
   VkDevice device;
   VkQueue queue;
   VkCommandPool cmd_pool;
-  VkCommandBuffer cmd_buffer;
   VkDescriptorPool descriptor_pool;
 
   // memory and buffers
   VkDeviceMemory memory;
   VkBuffer buffer[NUM_BUFFERS];
+  void *input_mmapped;
+  void *output_mmapped;
 
   // shaders
   VkShaderModule compute_shader[NUM_COMPUTE_PIPELINES];
@@ -33,6 +36,7 @@ struct monero_solver_vk_context {
   VkDescriptorSet descriptor_set[NUM_COMPUTE_PIPELINES];
   VkPipelineLayout pipeline_layout[NUM_COMPUTE_PIPELINES];
   VkPipeline pipeline[NUM_COMPUTE_PIPELINES];
+  VkCommandBuffer cmd_buffers[NUM_COMPUTE_PIPELINES];
 };
 
 struct monero_solver_vk {
@@ -62,7 +66,7 @@ bool monero_solver_vk_context_prepare_pipelines(
     struct monero_solver_vk_context *cl);
 
 bool monero_solver_vk_context_prepare_buffers(
-    struct monero_solver_vk_context *vk, size_t nthreads);
+    struct monero_solver_vk_context *vk, size_t parallelism);
 
 bool monero_solver_vk_context_prepare_command_buffer(
     struct monero_solver_vk_context *vk, size_t parallelism);
@@ -76,6 +80,15 @@ void monero_solver_vk_free(struct monero_solver *ptr)
   }
 
   free(ptr);
+}
+
+static inline void print_debug(const char *s, uint8_t *mem, size_t N)
+{
+  printf("CPU: %s", s);
+  for (size_t i = 0; i < N; ++i) {
+    printf("%02hhx", mem[i]);
+  }
+  printf("\n");
 }
 
 bool monero_solver_vk_set_job(struct monero_solver *ptr,
@@ -109,21 +122,7 @@ bool monero_solver_vk_set_job(struct monero_solver *ptr,
   }
 
   // copy memory to GPU
-  void *input_buffer;
-  VkResult vk_res = vkMapMemory(vk->device, vk->memory, 0, sizeof(input_data),
-                                0, &input_buffer);
-
-  if (vk_res != VK_SUCCESS) {
-    log_error("Error when calling vkMapMemory(%lu) for input buffer: %d",
-              sizeof(input_data), (int)vk_res);
-    return false;
-  }
-
-  memcpy(input_buffer, &input_data, sizeof(input_data));
-
-  // unmap
-  vkUnmapMemory(vk->device, vk->memory);
-
+  memcpy(vk->input_mmapped, &input_data, sizeof(input_data));
   return true;
 }
 
@@ -131,32 +130,48 @@ int monero_solver_vk_process(struct monero_solver *ptr, uint32_t nonce_from)
 {
   struct monero_solver_vk *solver = (struct monero_solver_vk *)ptr;
   struct monero_solver_vk_context *vk = solver->vk;
-  uint32_t *input_buffer;
-  VkResult vk_res = vkMapMemory(vk->device, vk->memory, 0, sizeof(uint32_t), 0,
-                                (void *)&input_buffer);
 
-  if (vk_res != VK_SUCCESS) {
-    log_error("Error when calling vkMapMemory for input buffer");
-    return false;
-  }
-  *input_buffer = nonce_from;
-  vkUnmapMemory(vk->device, vk->memory);
+  *(uint32_t *)vk->input_mmapped = nonce_from;
 
   VkSubmitInfo submit_info = {
-      VK_STRUCTURE_TYPE_SUBMIT_INFO, 0, 0, 0, 0, 1, &vk->cmd_buffer, 0, 0};
-
-  vk_res = vkQueueSubmit(vk->queue, 1, &submit_info, 0);
+      VK_STRUCTURE_TYPE_SUBMIT_INFO, NULL, 0, 0, 0, 2, vk->cmd_buffers, 0, 0};
+  print_debug("INPUT: ", vk->input_mmapped + 4, 88);
+  VkResult vk_res = vkQueueSubmit(vk->queue, 1, &submit_info, 0);
   if (vk_res != VK_SUCCESS) {
     log_error("Error when calling vkQueueSubmit");
     return false;
   }
 
-  log_info("Waiting for queue");
+  //  log_info("Waiting for queue");
   vk_res = vkQueueWaitIdle(vk->queue);
   if (vk_res != VK_SUCCESS) {
     log_error("Error when calling vkQueueWaitIdle");
     return false;
   }
+
+    // read results and compare with CPU version of keccak
+#define __VERIFY_VK_
+#ifdef __VERIFY_VK_
+
+  uint8_t keccak_state[CRYPTONIGHT_STATE_SIZE];
+  log_debug("Verifying results");
+  for (size_t k = 0; k < solver->parallelism; ++k) {
+    *(uint32_t *)&solver->input_hash[MONERO_NONCE_POSITION] = nonce_from + k;
+    keccak_256(keccak_state, CRYPTONIGHT_STATE_SIZE, solver->input_hash,
+               solver->input_hash_len);
+    print_debug("FINAL HASH CPU: ", keccak_state, 200);
+    uint8_t *output =
+        (uint8_t *)vk->output_mmapped + k * CRYPTONIGHT_STATE_SIZE;
+    print_debug("FINAL HASH VK:: ", output, 200);
+
+    if (memcmp(output, keccak_state, 200) != 0) {
+      log_error("Don't match: %lu", k);
+    } else {
+      log_info("Match: %lu", k);
+    }
+  }
+  exit(1);
+#endif
 
   return solver->parallelism;
 }
@@ -339,11 +354,11 @@ monero_solver_vk_context_init(uint32_t device_idx)
   }
 
   VkCommandBufferAllocateInfo command_buffer_allocate_info = {
-      VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, 0, ctx->cmd_pool,
-      VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1};
+      VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, NULL, ctx->cmd_pool,
+      VK_COMMAND_BUFFER_LEVEL_PRIMARY, NUM_COMPUTE_PIPELINES};
 
   vk_res = vkAllocateCommandBuffers(ctx->device, &command_buffer_allocate_info,
-                                    &ctx->cmd_buffer);
+                                    ctx->cmd_buffers);
 
   if (vk_res != VK_SUCCESS) {
     log_error("Error when calling vkAllocateCommandBuffers");
@@ -361,52 +376,54 @@ void monero_solver_vk_context_release(struct monero_solver_vk_context *ctx)
 {
   assert(ctx != NULL);
 
-  if (ctx->descriptor_pool != NULL) {
+  if (ctx->descriptor_pool != VK_NULL_HANDLE) {
     vkDestroyDescriptorPool(ctx->device, ctx->descriptor_pool, NULL);
   }
   for (size_t i = 0; i < NUM_COMPUTE_PIPELINES; ++i) {
-    if (ctx->descriptor_set_layout[i] != NULL) {
+    if (ctx->descriptor_set_layout[i] != VK_NULL_HANDLE) {
       vkDestroyDescriptorSetLayout(ctx->device, ctx->descriptor_set_layout[i],
                                    NULL);
     }
-    if (ctx->pipeline_layout[i] != NULL) {
+    if (ctx->pipeline_layout[i] != VK_NULL_HANDLE) {
       vkDestroyPipelineLayout(ctx->device, ctx->pipeline_layout[i], NULL);
     }
-    if (ctx->pipeline[i] != NULL) {
+    if (ctx->pipeline[i] != VK_NULL_HANDLE) {
       vkDestroyPipeline(ctx->device, ctx->pipeline[i], NULL);
     }
   }
   for (size_t i = 0; i < NUM_BUFFERS; ++i) {
-    if (ctx->buffer[i] != NULL)
+    if (ctx->buffer[i] != VK_NULL_HANDLE)
       vkDestroyBuffer(ctx->device, ctx->buffer[i], NULL);
   }
-  if (ctx->memory != NULL)
+  if (ctx->memory != VK_NULL_HANDLE) {
+    vkUnmapMemory(ctx->device, ctx->memory);
     vkFreeMemory(ctx->device, ctx->memory, NULL);
-  if (ctx->cmd_pool != NULL)
+  }
+  if (ctx->cmd_pool != VK_NULL_HANDLE)
     vkDestroyCommandPool(ctx->device, ctx->cmd_pool, NULL);
-  if (ctx->device != NULL)
+  if (ctx->device != VK_NULL_HANDLE)
     vkDestroyDevice(ctx->device, NULL);
-  if (ctx->instance != NULL)
+  if (ctx->instance != VK_NULL_HANDLE)
     vkDestroyInstance(ctx->instance, NULL);
   free(ctx);
 }
 
 bool monero_solver_vk_context_prepare_buffers(
-    struct monero_solver_vk_context *vk, size_t nthreads)
+    struct monero_solver_vk_context *vk, size_t parallelism)
 {
   VkResult vk_res;
 
   // calculate required memory size
   const size_t buffer_size[NUM_BUFFERS] = {
-      sizeof(uint32_t) + 88,               // input buffer
-      200 * nthreads,                      // state buffer
-      MONERO_CRYPTONIGHT_MEMORY * nthreads // scratchpad buffer
+      sizeof(uint32_t) + 88,                  // input buffer
+      CRYPTONIGHT_STATE_SIZE * parallelism,   // state buffer
+      MONERO_CRYPTONIGHT_MEMORY * parallelism // scratchpad buffer
   };
   // create buffers
   // input buffer
   const VkBufferCreateInfo buffer_create_info[3] = {
       {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, 0, 0, buffer_size[0],
-       VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_SHARING_MODE_EXCLUSIVE, 1, NULL},
+       VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_SHARING_MODE_EXCLUSIVE, 1, NULL},
       {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, 0, 0, buffer_size[1],
        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_SHARING_MODE_EXCLUSIVE, 1, NULL},
       {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, 0, 0, buffer_size[2],
@@ -446,7 +463,11 @@ bool monero_solver_vk_context_prepare_buffers(
     bool is_host_visible = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT &
                            properties.memoryTypes[k].propertyFlags;
 
-    if (is_host_visible && heap_size >= required_memory_size) {
+    bool is_host_coherent = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT &
+                            properties.memoryTypes[k].propertyFlags;
+
+    if (is_host_visible && is_host_coherent &&
+        heap_size >= required_memory_size) {
       log_debug("Found suitable memory @index: %u", k);
       memory_type_index = k;
       break;
@@ -475,6 +496,7 @@ bool monero_solver_vk_context_prepare_buffers(
             required_memory_size, memory_type_index);
 
   // bind memory to buffers
+  size_t buffer_offsets[NUM_BUFFERS];
   size_t offset = 0;
   for (size_t k = 0; k < NUM_BUFFERS; ++k) {
     size_t buf_sz = buffer_memory_requirements[k].size;
@@ -485,9 +507,35 @@ bool monero_solver_vk_context_prepare_buffers(
       log_error("Error when calling vkBindBufferMemory: buffer #%lu", k);
       return false;
     }
+    buffer_offsets[k] = offset;
     offset += buf_sz;
   }
 
+  // map input/output buffers to host memory
+  vk_res = vkMapMemory(vk->device, vk->memory, 0, VK_WHOLE_SIZE, 0,
+                       &vk->input_mmapped);
+
+  if (vk_res != VK_SUCCESS) {
+    log_error("Error when calling vkMapMemory for input buffer: %d",
+              (int)vk_res);
+    return false;
+  }
+
+  vk->output_mmapped =
+      ((uint8_t *)vk->input_mmapped) + buffer_offsets[STATE_BUFFER];
+  log_info("Input mapped: %p, output_mapped: %p, offset: %lu",
+           vk->input_mmapped, vk->output_mmapped, buffer_offsets[STATE_BUFFER]);
+
+  /*
+    vk_res = vkMapMemory(vk->device, vk->memory, buffer_offsets[STATE_BUFFER],
+                         buffer_size[STATE_BUFFER], 0, &vk->output_mmapped);
+
+    if (vk_res != VK_SUCCESS) {
+      log_error("Error when calling vkMapMemory for state buffer: %d",
+                (int)vk_res);
+      return false;
+    }
+  */
   return true;
 }
 
@@ -521,7 +569,7 @@ bool monero_solver_vk_context_prepare_pipelines(
 
   // descriptors set
   VkDescriptorSetLayoutBinding input_descriptor_set_layout_bindings[2] = {
-      {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, 0},
+      {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, 0},
       {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
        0}};
 
@@ -592,7 +640,7 @@ bool monero_solver_vk_context_prepare_command_buffer(
   VkResult vk_res;
 
   VkDescriptorPoolSize descriptor_pool_size[2] = {
-      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
       {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3}};
 
   VkDescriptorPoolCreateInfo descriptor_pool_create_info = {
@@ -631,54 +679,47 @@ bool monero_solver_vk_context_prepare_command_buffer(
 
   VkWriteDescriptorSet input_write_descriptor_set[2] = {
       {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, vk->descriptor_set[0], 0,
-       0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, NULL, &buffer_desc[0], NULL},
+       0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[0], NULL},
       {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, vk->descriptor_set[0], 1,
        0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[1], NULL}};
 
   vkUpdateDescriptorSets(vk->device, 2, input_write_descriptor_set, 0, NULL);
 
-  VkWriteDescriptorSet keccak_write_descriptor_set[2] = {
+  VkWriteDescriptorSet keccak_write_descriptor_set[1] = {
       {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, vk->descriptor_set[1], 0,
-       0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[1], NULL},
-      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, vk->descriptor_set[1], 1,
-       0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[2], NULL}};
+       0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[1], NULL}};
 
-  vkUpdateDescriptorSets(vk->device, 2, keccak_write_descriptor_set, 0, NULL);
+  vkUpdateDescriptorSets(vk->device, 1, keccak_write_descriptor_set, 0, NULL);
 
   // record commands
-  vk_res = vkResetCommandBuffer(vk->cmd_buffer,
-                                VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
-  if (vk_res != VK_SUCCESS) {
-    log_error("Error when calling vkResetCommandBuffer");
-    return false;
-  }
-
   VkCommandBufferBeginInfo command_buffer_begin_info = {
       VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, 0,
-      VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, 0};
-
-  vk_res = vkBeginCommandBuffer(vk->cmd_buffer, &command_buffer_begin_info);
-  if (vk_res != VK_SUCCESS) {
-    log_error("Error when calling vkBeginCommandBuffer");
-    return false;
-  }
+      VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT, 0};
 
   for (size_t k = 0; k < NUM_COMPUTE_PIPELINES; ++k) {
-    vkCmdBindPipeline(vk->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+    vk_res =
+        vkBeginCommandBuffer(vk->cmd_buffers[k], &command_buffer_begin_info);
+    if (vk_res != VK_SUCCESS) {
+      log_error("Error when calling vkBeginCommandBuffer for pipeline: %lu", k);
+      return false;
+    }
+
+    vkCmdBindPipeline(vk->cmd_buffers[k], VK_PIPELINE_BIND_POINT_COMPUTE,
                       vk->pipeline[k]);
 
-    vkCmdBindDescriptorSets(vk->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+    vkCmdBindDescriptorSets(vk->cmd_buffers[k], VK_PIPELINE_BIND_POINT_COMPUTE,
                             vk->pipeline_layout[k], 0, 1,
                             &vk->descriptor_set[k], 0, 0);
 
-    vkCmdDispatch(vk->cmd_buffer, parallelism, 1, 1);
+    vkCmdDispatch(vk->cmd_buffers[k], parallelism, 1, 1);
+
+    vk_res = vkEndCommandBuffer(vk->cmd_buffers[k]);
+
+    if (vk_res != VK_SUCCESS) {
+      log_error("Error when calling vkEndCommandBuffer");
+      return false;
+    }
   }
 
-  vk_res = vkEndCommandBuffer(vk->cmd_buffer);
-
-  if (vk_res != VK_SUCCESS) {
-    log_error("Error when calling vkEndCommandBuffer");
-    return false;
-  }
   return true;
 }
