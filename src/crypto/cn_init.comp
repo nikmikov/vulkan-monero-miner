@@ -1,5 +1,5 @@
 /** Compute shader for first stage of cryptonight */
-#version 430 core
+#version 450 core
 
 #define INPUT_HASH_SIZE_UINT 22 /** 88 bytes */
 

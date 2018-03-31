@@ -9,10 +9,11 @@
 #include "logging.h"
 #include "resources.h"
 
-#define NUM_COMPUTE_PIPELINES 2
 #define CRYPTONIGHT_STATE_SIZE 200
 
 enum BUFFERS { INPUT_BUFFER = 0, STATE_BUFFER, SCRATCHPAD_BUFFER, NUM_BUFFERS };
+
+enum PIPELINES {PIPELINE_INIT = 0, PIPELINE_KECCAK, NUM_COMPUTE_PIPELINES};
 
 struct monero_solver_vk_context {
   uint32_t device_idx;
@@ -31,12 +32,12 @@ struct monero_solver_vk_context {
   void *output_mmapped;
 
   // shaders
+  VkCommandBuffer cmd_buffer;
   VkShaderModule compute_shader[NUM_COMPUTE_PIPELINES];
   VkDescriptorSetLayout descriptor_set_layout[NUM_COMPUTE_PIPELINES];
   VkDescriptorSet descriptor_set[NUM_COMPUTE_PIPELINES];
   VkPipelineLayout pipeline_layout[NUM_COMPUTE_PIPELINES];
   VkPipeline pipeline[NUM_COMPUTE_PIPELINES];
-  VkCommandBuffer cmd_buffers[NUM_COMPUTE_PIPELINES];
 };
 
 struct monero_solver_vk {
@@ -134,8 +135,8 @@ int monero_solver_vk_process(struct monero_solver *ptr, uint32_t nonce_from)
   *(uint32_t *)vk->input_mmapped = nonce_from;
 
   VkSubmitInfo submit_info = {
-      VK_STRUCTURE_TYPE_SUBMIT_INFO, NULL, 0, 0, 0, 2, vk->cmd_buffers, 0, 0};
-  print_debug("INPUT: ", vk->input_mmapped + 4, 88);
+      VK_STRUCTURE_TYPE_SUBMIT_INFO, NULL, 0, 0, 0, 1, &vk->cmd_buffer, 0, 0};
+
   VkResult vk_res = vkQueueSubmit(vk->queue, 1, &submit_info, 0);
   if (vk_res != VK_SUCCESS) {
     log_error("Error when calling vkQueueSubmit");
@@ -355,10 +356,10 @@ monero_solver_vk_context_init(uint32_t device_idx)
 
   VkCommandBufferAllocateInfo command_buffer_allocate_info = {
       VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, NULL, ctx->cmd_pool,
-      VK_COMMAND_BUFFER_LEVEL_PRIMARY, NUM_COMPUTE_PIPELINES};
+      VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1};
 
   vk_res = vkAllocateCommandBuffers(ctx->device, &command_buffer_allocate_info,
-                                    ctx->cmd_buffers);
+                                    &ctx->cmd_buffer);
 
   if (vk_res != VK_SUCCESS) {
     log_error("Error when calling vkAllocateCommandBuffers");
@@ -696,29 +697,42 @@ bool monero_solver_vk_context_prepare_command_buffer(
       VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, 0,
       VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT, 0};
 
-  for (size_t k = 0; k < NUM_COMPUTE_PIPELINES; ++k) {
-    vk_res =
-        vkBeginCommandBuffer(vk->cmd_buffers[k], &command_buffer_begin_info);
-    if (vk_res != VK_SUCCESS) {
-      log_error("Error when calling vkBeginCommandBuffer for pipeline: %lu", k);
-      return false;
-    }
+  vk_res =
+    vkBeginCommandBuffer(vk->cmd_buffer, &command_buffer_begin_info);
 
-    vkCmdBindPipeline(vk->cmd_buffers[k], VK_PIPELINE_BIND_POINT_COMPUTE,
-                      vk->pipeline[k]);
+  if (vk_res != VK_SUCCESS) {
+    log_error("Error when calling vkBeginCommandBuffer");
+    return false;
+  }
 
-    vkCmdBindDescriptorSets(vk->cmd_buffers[k], VK_PIPELINE_BIND_POINT_COMPUTE,
-                            vk->pipeline_layout[k], 0, 1,
-                            &vk->descriptor_set[k], 0, 0);
+  vkCmdBindPipeline(vk->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                    vk->pipeline[PIPELINE_INIT]);
 
-    vkCmdDispatch(vk->cmd_buffers[k], parallelism, 1, 1);
+  vkCmdBindDescriptorSets(vk->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                          vk->pipeline_layout[PIPELINE_INIT], 0, 1,
+                          &vk->descriptor_set[PIPELINE_INIT], 0, 0);
 
-    vk_res = vkEndCommandBuffer(vk->cmd_buffers[k]);
+  vkCmdDispatch(vk->cmd_buffer, parallelism, 1, 1);
 
-    if (vk_res != VK_SUCCESS) {
-      log_error("Error when calling vkEndCommandBuffer");
-      return false;
-    }
+  vkCmdPipelineBarrier(vk->cmd_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                       VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL, 0, NULL,
+                       0, NULL);
+
+  vkCmdBindPipeline(vk->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                    vk->pipeline[PIPELINE_KECCAK]);
+
+  vkCmdBindDescriptorSets(vk->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                          vk->pipeline_layout[PIPELINE_KECCAK], 0, 1,
+                          &vk->descriptor_set[PIPELINE_KECCAK], 0, 0);
+
+  vkCmdDispatch(vk->cmd_buffer, parallelism, 1, 1);
+
+
+  vk_res = vkEndCommandBuffer(vk->cmd_buffer);
+
+  if (vk_res != VK_SUCCESS) {
+    log_error("Error when calling vkEndCommandBuffer");
+    return false;
   }
 
   return true;

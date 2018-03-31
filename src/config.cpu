@@ -1,0 +1,24 @@
+[{
+    "currency": "Monero",
+    "protocol": "stratum-monero",
+    "wallet":"41ssDghM2vkiyk9m6c3WgbNjBsnse8xni3o6xz2uC9eeJK9FfLebMtvQNyPLxJ8DvA1wt9Qw6ycPCZ5agXKXht1272uMYF2.test",
+    "password": "fedor:nik.mikov@gmail.com",
+ "pool_list": [
+      {
+        "host": "sg.minexmr.com",
+        "port": "5555",
+        "use_tls": false,
+        "pool_weight": 999
+      }
+    ],
+    "solvers": [
+       {"cpu": {"affine_to_cpu": 1}},
+       {"cpu": {"affine_to_cpu": 3}},
+       {"cpu": {"affine_to_cpu": 5}},
+       {"cpu": {"affine_to_cpu": 7}},
+       {"cpu": {"affine_to_cpu": 9}},
+       {"cpu": {"affine_to_cpu": 11}},
+       {"cpu": {"affine_to_cpu": 13}},
+       {"cpu": {"affine_to_cpu": 15}}
+    ]
+}]
