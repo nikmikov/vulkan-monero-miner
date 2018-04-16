@@ -9,10 +9,8 @@ static inline __m128i aes_encode(__m128i in, __m128i key)
   return _mm_aesenc_si128(in, key);
 }
 
-static inline __m128i aes_keygenassist(__m128i key, uint8_t rcon)
-{
-  return _mm_aeskeygenassist_si128(key, rcon);
-}
+#define aes_keygenassist(key, rcon) _mm_aeskeygenassist_si128(key, rcon)
+
 
 #else /* Soft AES **/
 

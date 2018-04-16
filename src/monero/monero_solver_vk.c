@@ -1,5 +1,6 @@
 #include "monero/monero_solver.h"
 
+#include <stdio.h>
 #include <assert.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -8,6 +9,7 @@
 
 #include "logging.h"
 #include "resources.h"
+#include "crypto/cryptonight_spv.h"
 
 #define CRYPTONIGHT_STATE_SIZE 200
 
@@ -158,9 +160,9 @@ int monero_solver_vk_process(struct monero_solver *ptr, uint32_t nonce_from)
   log_debug("Verifying results");
   for (size_t k = 0; k < solver->parallelism; ++k) {
     *(uint32_t *)&solver->input_hash[MONERO_NONCE_POSITION] = nonce_from + k;
-    keccak_256(keccak_state, CRYPTONIGHT_STATE_SIZE, solver->input_hash,
-               solver->input_hash_len);
-    print_debug("FINAL HASH CPU: ", keccak_state, 200);
+//    keccak_256(keccak_state, CRYPTONIGHT_STATE_SIZE, solver->input_hash,
+//               solver->input_hash_len);
+    print_debug("FINAL HASH CPU: ",  solver->input_hash, 200);
     uint8_t *output =
         (uint8_t *)vk->output_mmapped + k * CRYPTONIGHT_STATE_SIZE;
     print_debug("FINAL HASH VK:: ", output, 200);
@@ -180,9 +182,19 @@ int monero_solver_vk_process(struct monero_solver *ptr, uint32_t nonce_from)
 struct monero_solver *
 monero_solver_new_vk(const struct monero_config_solver_vk *cfg)
 {
+  ////////////////////////////// TEMORARY DEBUG ///////////////////////////
+#if 0
+  log_info("Dumping shader: %p: %lu", cryptonight_init_shader, cryptonight_init_shader_size);
+  FILE *f = fopen("/home/fedor/src/dorenom/src/crypto/binary.spv", "w");
+  fwrite((void*)cryptonight_init_shader, 1, cryptonight_init_shader_size,  f);
+  fclose(f);
+  log_info("Wrote %lu, bytes", cryptonight_init_shader_size);
+  exit(1);
+#endif
+  ////////////////////////////// TEMORARY DEBUG ///////////////////////////
+
   assert(cfg != NULL);
   assert(cfg->device_id >= 0);
-
   struct monero_solver_vk_context *vk_ctx =
       monero_solver_vk_context_init((uint32_t)cfg->device_id);
   if (vk_ctx == NULL) {
@@ -220,6 +232,7 @@ monero_solver_new_vk(const struct monero_config_solver_vk *cfg)
   solver_vk->solver.set_job = monero_solver_vk_set_job;
   solver_vk->solver.process = monero_solver_vk_process;
   solver_vk->solver.free = monero_solver_vk_free;
+
 
   if (monero_solver_init(&cfg->solver, &solver_vk->solver)) {
     return &solver_vk->solver;
@@ -546,7 +559,7 @@ bool monero_solver_vk_context_prepare_pipelines(
   VkResult vk_res;
   VkShaderModuleCreateInfo cn_init_create_info = {
       VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, 0, 0,
-      (spv_cn_init_end - spv_cn_init), (uint32_t *)spv_cn_init};
+      cryptonight_init_shader_size, cryptonight_init_shader};
 
   vk_res = vkCreateShaderModule(vk->device, &cn_init_create_info, 0,
                                 &vk->compute_shader[0]);
