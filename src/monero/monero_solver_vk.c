@@ -113,15 +113,16 @@ bool monero_solver_vk_set_job(struct monero_solver *ptr,
 
   struct {
     uint32_t nonce;
-    uint8_t hash[MONERO_INPUT_HASH_LEN];
+    uint8_t hash[CRYPTONIGHT_STATE_SIZE];
   } input_data = {0};
 
   memcpy(input_data.hash, input_hash, input_hash_len);
   // padding
   if (input_hash_len < MONERO_INPUT_HASH_LEN) {
     const size_t zero_from = input_hash_len + 1;
-    memset(input_data.hash + zero_from, 0, MONERO_INPUT_HASH_LEN - zero_from);
+    memset(input_data.hash + zero_from, 0, CRYPTONIGHT_STATE_SIZE - zero_from);
     input_data.hash[input_hash_len] = 0x01;
+    input_data.hash[135] = 0x80;
   }
 
   // copy memory to GPU
@@ -160,9 +161,9 @@ int monero_solver_vk_process(struct monero_solver *ptr, uint32_t nonce_from)
   log_debug("Verifying results");
   for (size_t k = 0; k < solver->parallelism; ++k) {
     *(uint32_t *)&solver->input_hash[MONERO_NONCE_POSITION] = nonce_from + k;
-//    keccak_256(keccak_state, CRYPTONIGHT_STATE_SIZE, solver->input_hash,
-//               solver->input_hash_len);
-    print_debug("FINAL HASH CPU: ",  solver->input_hash, 200);
+    keccak_256(keccak_state, CRYPTONIGHT_STATE_SIZE, solver->input_hash,
+               solver->input_hash_len);
+    print_debug("FINAL HASH CPU: ",  keccak_state, 200);
     uint8_t *output =
         (uint8_t *)vk->output_mmapped + k * CRYPTONIGHT_STATE_SIZE;
     print_debug("FINAL HASH VK:: ", output, 200);
@@ -184,11 +185,11 @@ monero_solver_new_vk(const struct monero_config_solver_vk *cfg)
 {
   ////////////////////////////// TEMORARY DEBUG ///////////////////////////
 #if 0
-  log_info("Dumping shader: %p: %lu", cryptonight_init_shader, cryptonight_init_shader_size);
+  log_info("Dumping shader: %p: %lu", cryptonight_keccak_shader, cryptonight_keccak_shader_size);
   FILE *f = fopen("/home/fedor/src/dorenom/src/crypto/binary.spv", "w");
-  fwrite((void*)cryptonight_init_shader, 1, cryptonight_init_shader_size,  f);
+  fwrite((void*)cryptonight_keccak_shader, 1, cryptonight_keccak_shader_size,  f);
   fclose(f);
-  log_info("Wrote %lu, bytes", cryptonight_init_shader_size);
+  log_info("Wrote %lu, bytes", cryptonight_keccak_shader_size);
   exit(1);
 #endif
   ////////////////////////////// TEMORARY DEBUG ///////////////////////////
@@ -429,7 +430,7 @@ bool monero_solver_vk_context_prepare_buffers(
 
   // calculate required memory size
   const size_t buffer_size[NUM_BUFFERS] = {
-      sizeof(uint32_t) + 88,                  // input buffer
+      sizeof(uint32_t) + CRYPTONIGHT_STATE_SIZE, // input buffer
       CRYPTONIGHT_STATE_SIZE * parallelism,   // state buffer
       MONERO_CRYPTONIGHT_MEMORY * parallelism // scratchpad buffer
   };
@@ -571,6 +572,7 @@ bool monero_solver_vk_context_prepare_pipelines(
 
   VkShaderModuleCreateInfo cn_keccak_create_info = {
       VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, 0, 0,
+//      cryptonight_keccak_shader_size, cryptonight_keccak_shader};
       (spv_cn_keccak_end - spv_cn_keccak), (uint32_t *)spv_cn_keccak};
 
   vk_res = vkCreateShaderModule(vk->device, &cn_keccak_create_info, 0,
