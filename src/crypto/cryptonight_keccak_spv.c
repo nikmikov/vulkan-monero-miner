@@ -10,6 +10,7 @@ enum { // variables
   LABEL_THETA_FOLD5_XOR,
   LABEL_LOOP,
   LABEL_LOOP_COND,
+  LABEL_LOOP_INC,
   LABEL_LOOP_BODY,
   LABEL_LOOP_END,
   // global variables
@@ -22,7 +23,7 @@ enum { // variables
   TYPE_UINT64,
   TYPE_UINT3,
   TYPE_PTR_UINT_INPUT,
-  TYPE_PTR_UINT_UNIFORM,
+  TYPE_PTR_UINT_FUNCTION,
   TYPE_PTR_UINT3_INPUT,
   TYPE_ARRAY_UINT64_25,
   TYPE_PTR_ARRAY_UINT64_25,
@@ -69,7 +70,7 @@ enum { // variables
 #define theta_vars(x)                                                          \
   PTR_HASH_STATE_i##x, HASH_STATE_i##x, VAR_B##x, VAR_B##x##_0, VAR_B##x##_1,  \
       VAR_B##x##_2, VAR_B##x##_3, VAR_B##x##_SL1, VAR_B##x##_SR63,             \
-  VAR_B##x##_RL1, VAR_BC##x, VAR_B##x##_HS
+      VAR_B##x##_RL1, VAR_BC##x, VAR_B##x##_HS
   theta_vars(0),
   theta_vars(1),
   theta_vars(2),
@@ -99,7 +100,6 @@ enum { // variables
   VAR_ROUND,
   VAR_ROUND_INC,
   VAR_LOOP_COND,
-
   BOUND
 };
 
@@ -120,6 +120,7 @@ const uint32_t cryptonight_keccak_shader[] = {
   (6 << 16) | OP_EXECUTION_MODE, FUNC_MAIN, EXEC_MODE_LOCALSIZE, 1, 1, 1,
   // DECORATIONS
   (4 << 16) | OP_DECORATE, GLOBAL_INVOCATION_ID, DECOR_BUILTIN, BUILTIN_GLOBAL_INVOCATION_ID,
+  (4 << 16) | OP_DECORATE, TYPE_ARRAY_UINT64_25, DECOR_ARRAY_STRIDE, 8,
   // state buffer
   (4 << 16) | OP_DECORATE, TYPE_RT_ARRAY_ARRAY_UINT64_25, DECOR_ARRAY_STRIDE, 200,
   (3 << 16) | OP_DECORATE, TYPE_STRUCT_BUFFER, DECOR_BLOCK,
@@ -178,7 +179,7 @@ const uint32_t cryptonight_keccak_shader[] = {
   (4 << 16) | OP_TYPE_POINTER, TYPE_PTR_BUFFER, SC_BUFFER, TYPE_STRUCT_BUFFER,
 
   //
-  (4 << 16) | OP_TYPE_POINTER, TYPE_PTR_UINT_UNIFORM, SC_UNIFORM, TYPE_UINT,   //type: [Input] uint*
+  (4 << 16) | OP_TYPE_POINTER, TYPE_PTR_UINT_FUNCTION, SC_FUNCTION, TYPE_UINT,   //type: [Function] uint*
 
   // GLOBAL VARIABLES
   (4 << 16) | OP_VARIABLE, TYPE_PTR_UINT3_INPUT, GLOBAL_INVOCATION_ID, SC_INPUT,
@@ -188,29 +189,27 @@ const uint32_t cryptonight_keccak_shader[] = {
   (5 << 16) | OP_FUNCTION, TYPE_VOID, FUNC_MAIN, FNC_NONE, TYPE_FUNC_VOID,
   (2 << 16) | OP_LABEL, LABEL_MAIN,
   // round variable
-  (5 << 16) | OP_VARIABLE, TYPE_PTR_UINT_UNIFORM, PTR_VAR_ROUND, SC_FUNCTION, CONST_UINT_0,
+  (5 << 16) | OP_VARIABLE, TYPE_PTR_UINT_FUNCTION, PTR_VAR_ROUND, SC_FUNCTION, CONST_UINT_0,
   // get global invocation index
   (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_UINT_INPUT, PTR_GLOBAL_INVOCATION_X, GLOBAL_INVOCATION_ID, CONST_UINT_0,
   (4 << 16) | OP_LOAD, TYPE_UINT, GLOBAL_INVOCATION_X, PTR_GLOBAL_INVOCATION_X,
   // get pointer to HASH_STATE array for current invocation
   (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_RT_ARRAY_ARRAY_UINT64_25, PTR_BUFFER_INV, PTR_BUFFER, CONST_UINT_0,
   (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_ARRAY_UINT64_25, PTR_HASH_STATE, PTR_BUFFER_INV, GLOBAL_INVOCATION_X,
+
   (2 << 16) | OP_BRANCH, LABEL_LOOP,
 
   // 24 rounds loop: for(int round = 0; round < 24; ++round)
   (2 << 16) | OP_LABEL, LABEL_LOOP,
-  (4 << 16) | OP_LOOP_MERGE, LABEL_LOOP_END, LABEL_LOOP_BODY, LC_NONE,
+  (4 << 16) | OP_LOOP_MERGE, LABEL_LOOP_END, LABEL_LOOP_INC, LC_NONE,
   (2 << 16) | OP_BRANCH, LABEL_LOOP_COND,
   (2 << 16) | OP_LABEL, LABEL_LOOP_COND,
   (4 << 16) | OP_LOAD, TYPE_UINT, VAR_ROUND, PTR_VAR_ROUND,
-  (5 << 16) | OP_ULESS_THAN, TYPE_BOOL, VAR_LOOP_COND, VAR_ROUND, CONST_UINT_24,
+  (5 << 16) | OP_ULESS_THAN, TYPE_BOOL, VAR_LOOP_COND, VAR_ROUND, CONST_UINT_24, // round < 24 ?
   (4 << 16) | OP_BRANCH_CONDITIONAL, VAR_LOOP_COND, LABEL_LOOP_BODY, LABEL_LOOP_END,
   (2 << 16) | OP_LABEL, LABEL_LOOP_BODY,
-  (5 << 16) | OP_IADD, TYPE_UINT, VAR_ROUND_INC, VAR_ROUND, CONST_UINT_1, // ; ++round
-  (3 << 16) | OP_STORE, PTR_VAR_ROUND, VAR_ROUND_INC,
 
   // THETA
-
 #define load_state(x) \
   (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_UINT64_BUFFER, PTR_HASH_STATE_i##x, PTR_HASH_STATE, CONST_UINT_##x,\
   (4 << 16) | OP_LOAD, TYPE_UINT64, HASH_STATE_i##x, PTR_HASH_STATE_i##x
@@ -287,6 +286,7 @@ const uint32_t cryptonight_keccak_shader[] = {
   // BC4 = B4 ^ B1_RL1
   (5 << 16) | OP_BITWISE_XOR, TYPE_UINT64, VAR_BC4, VAR_B4, VAR_B1_RL1,
 
+
 #define theta_xor_store(x,y)\
   (5 << 16) | OP_BITWISE_XOR, TYPE_UINT64, VAR_B##x##_HS, VAR_BC##y, HASH_STATE_i##x,\
   (3 << 16) | OP_STORE, PTR_HASH_STATE_i##x, VAR_B##x##_HS
@@ -329,6 +329,11 @@ const uint32_t cryptonight_keccak_shader[] = {
   // END: THETA
 
   // RHO and PHI
+
+  (2 << 16) | OP_BRANCH, LABEL_LOOP_INC,
+  (2 << 16) | OP_LABEL, LABEL_LOOP_INC,
+  (5 << 16) | OP_IADD, TYPE_UINT, VAR_ROUND_INC, VAR_ROUND, CONST_UINT_1, // ; ++round
+  (3 << 16) | OP_STORE, PTR_VAR_ROUND, VAR_ROUND_INC,
 
   (2 << 16) | OP_BRANCH, LABEL_LOOP,
   // main:return
