@@ -18,7 +18,7 @@ enum { // variables
   // types
   TYPE_VOID,
   TYPE_FUNC_VOID,
-  TYPE_FUNC_ULONG_ULONG,
+  TYPE_FUNC_ULONG_ULONG_UINT,
   TYPE_BOOL,
   TYPE_UINT,
   TYPE_ULONG,
@@ -60,7 +60,19 @@ enum { // variables
   CONST_UINT_23,
   CONST_UINT_24,
   CONST_UINT_25,
-  CONST_UINT_63,
+  CONST_UINT_27,
+  CONST_UINT_28,
+  CONST_UINT_36,
+  CONST_UINT_39,
+  CONST_UINT_41,
+  CONST_UINT_43,
+  CONST_UINT_44,
+  CONST_UINT_45,
+  CONST_UINT_55,
+  CONST_UINT_56,
+  CONST_UINT_61,
+  CONST_UINT_62,
+  CONST_UINT_64,
   // pointers
   PTR_GLOBAL_INVOCATION_X,
   PTR_BUFFER,
@@ -69,15 +81,18 @@ enum { // variables
   // rotl64: local variables
   FUNC_ROTL64,
   LABEL_ROTL64,
-  ROTL64_PARAM,
-  VAR_ROTL64_SL1,
-  VAR_ROTL64_SR63,
-  VAR_ROTL64_RESULT,
+  ROTL64_ARG,
+  ROTL64_NUM_BITS,
+  ROTL64_OFFSET,
+  ROTL64_SL,
+  ROTL64_SR,
+  ROTL64_RESULT,
   // main: local variables
   GLOBAL_INVOCATION_X,
 #define theta_vars(x)                                                          \
   PTR_HASH_STATE_i##x, HASH_STATE_i##x, VAR_B##x, VAR_B##x##_0, VAR_B##x##_1,  \
-      VAR_B##x##_2, VAR_B##x##_3, VAR_B##x##_RL1, VAR_BC##x, VAR_B##x##_HS
+      VAR_B##x##_2, VAR_B##x##_3, VAR_B##x##_RL1, VAR_BC##x, VAR_THETA_##x,    \
+  VAR_RHO_##x, VAR_NOT_RHO_##x, VAR_CHI_S_##x, VAR_CHI_##x
   theta_vars(0),
   theta_vars(1),
   theta_vars(2),
@@ -142,7 +157,7 @@ const uint32_t cryptonight_keccak_shader[] = {
   (4 << 16) | OP_TYPE_VECTOR, TYPE_UINT3, TYPE_UINT, 3,   //type: uvec3
   // FUNCTION TYPES
   (3 << 16) | OP_TYPE_FUNCTION, TYPE_FUNC_VOID, TYPE_VOID,//type: void fn()
-  (4 << 16) | OP_TYPE_FUNCTION, TYPE_FUNC_ULONG_ULONG, TYPE_ULONG, TYPE_ULONG,  //type: ulong fn(ulong)
+  (5 << 16) | OP_TYPE_FUNCTION, TYPE_FUNC_ULONG_ULONG_UINT, TYPE_ULONG, TYPE_ULONG, TYPE_UINT,  //type: ulong fn(ulong,uint)
 
   // CONSTANTS
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_0, 0, // 0U
@@ -171,7 +186,19 @@ const uint32_t cryptonight_keccak_shader[] = {
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_23, 23, // 23U
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_24, 24, // 24U
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_25, 25, // 25U
-  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_63, 63, // 63U
+  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_27, 27, // 27U
+  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_28, 28, // 28U
+  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_36, 36, // 36U
+  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_39, 39, // 39U
+  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_41, 41, // 41U
+  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_43, 43, // 43U
+  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_44, 44, // 44U
+  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_45, 45, // 45U
+  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_55, 55, // 55U
+  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_56, 56, // 56U
+  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_61, 61, // 61U
+  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_62, 62, // 62U
+  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_64, 64, // 64U
 
   // ARRAY TYPES AND POINTERS
   // globalInvocationId
@@ -194,14 +221,16 @@ const uint32_t cryptonight_keccak_shader[] = {
   (4 << 16) | OP_VARIABLE, TYPE_PTR_UINT3_INPUT, GLOBAL_INVOCATION_ID, SC_INPUT,
   (4 << 16) | OP_VARIABLE, TYPE_PTR_BUFFER, PTR_BUFFER, SC_BUFFER,
 
-  // ulong rotate_left_64(ulong)
-  (5 << 16) | OP_FUNCTION, TYPE_ULONG, FUNC_ROTL64, FNC_INLINE, TYPE_FUNC_ULONG_ULONG,
-  (3 << 16) | OP_FUNCTION_PARAMETER, TYPE_ULONG, ROTL64_PARAM,
+  // ulong rotate_left_64(ulong arg, uint num_bits)
+  (5 << 16) | OP_FUNCTION, TYPE_ULONG, FUNC_ROTL64, FNC_INLINE, TYPE_FUNC_ULONG_ULONG_UINT,
+  (3 << 16) | OP_FUNCTION_PARAMETER, TYPE_ULONG, ROTL64_ARG,
+  (3 << 16) | OP_FUNCTION_PARAMETER, TYPE_UINT, ROTL64_NUM_BITS,
   (2 << 16) | OP_LABEL, LABEL_ROTL64,
-  (5 << 16) | OP_SHIFT_LEFT_LOGICAL, TYPE_ULONG, VAR_ROTL64_SL1, ROTL64_PARAM, CONST_UINT_1,
-  (5 << 16) | OP_SHIFT_RIGHT_LOGICAL, TYPE_ULONG, VAR_ROTL64_SR63, ROTL64_PARAM, CONST_UINT_63,
-  (5 << 16) | OP_BITWISE_OR, TYPE_ULONG, VAR_ROTL64_RESULT, VAR_ROTL64_SL1, VAR_ROTL64_SR63,
-  (2 << 16) | OP_RETURN_VALUE, VAR_ROTL64_RESULT,
+  (5 << 16) | OP_ISUB, TYPE_UINT, ROTL64_OFFSET, CONST_UINT_64, ROTL64_NUM_BITS,
+  (5 << 16) | OP_SHIFT_LEFT_LOGICAL, TYPE_ULONG, ROTL64_SL, ROTL64_ARG, ROTL64_NUM_BITS,
+  (5 << 16) | OP_SHIFT_RIGHT_LOGICAL, TYPE_ULONG, ROTL64_SR, ROTL64_ARG, ROTL64_OFFSET,
+  (5 << 16) | OP_BITWISE_OR, TYPE_ULONG, ROTL64_RESULT, ROTL64_SL, ROTL64_SR,
+  (2 << 16) | OP_RETURN_VALUE, ROTL64_RESULT,
   (1 << 16) | OP_FUNCTION_END,
 
   // MAIN
@@ -282,67 +311,148 @@ const uint32_t cryptonight_keccak_shader[] = {
   (5 << 16) | OP_BITWISE_XOR, TYPE_ULONG, VAR_B4_1, VAR_B4_0, HASH_STATE_i14,
   (5 << 16) | OP_BITWISE_XOR, TYPE_ULONG, VAR_B4_2, VAR_B4_1, HASH_STATE_i19,
   (5 << 16) | OP_BITWISE_XOR, TYPE_ULONG, VAR_B4, VAR_B4_2, HASH_STATE_i24,
-  // rotate left by 1: B0,B1,B2,B3,B4
-  (5 << 16) | OP_FUNCTION_CALL, TYPE_ULONG, VAR_B0_RL1, FUNC_ROTL64, VAR_B0,
-  (5 << 16) | OP_FUNCTION_CALL, TYPE_ULONG, VAR_B1_RL1, FUNC_ROTL64, VAR_B1,
-  (5 << 16) | OP_FUNCTION_CALL, TYPE_ULONG, VAR_B2_RL1, FUNC_ROTL64, VAR_B2,
-  (5 << 16) | OP_FUNCTION_CALL, TYPE_ULONG, VAR_B3_RL1, FUNC_ROTL64, VAR_B3,
-  (5 << 16) | OP_FUNCTION_CALL, TYPE_ULONG, VAR_B4_RL1, FUNC_ROTL64, VAR_B4,
 
-  // BC0 = B0 ^ B2_RL1
+  // BC0 = B0 ^ ROTL64(B2)
+  (6 << 16) | OP_FUNCTION_CALL, TYPE_ULONG, VAR_B2_RL1, FUNC_ROTL64, VAR_B2, CONST_UINT_1,
   (5 << 16) | OP_BITWISE_XOR, TYPE_ULONG, VAR_BC0, VAR_B0, VAR_B2_RL1,
-  // BC1 = B1 ^ B3_RL1
+
+  // BC1 = B1 ^ ROTL(B3)
+  (6 << 16) | OP_FUNCTION_CALL, TYPE_ULONG, VAR_B3_RL1, FUNC_ROTL64, VAR_B3, CONST_UINT_1,
   (5 << 16) | OP_BITWISE_XOR, TYPE_ULONG, VAR_BC1, VAR_B1, VAR_B3_RL1,
-  // BC2 = B2 ^ B4_RL1
+
+  // BC2 = B2 ^ ROTL64(B4)
+  (6 << 16) | OP_FUNCTION_CALL, TYPE_ULONG, VAR_B4_RL1, FUNC_ROTL64, VAR_B4, CONST_UINT_1,
   (5 << 16) | OP_BITWISE_XOR, TYPE_ULONG, VAR_BC2, VAR_B2, VAR_B4_RL1,
-  // BC3 = B3 ^ B0_RL1
+
+  // BC3 = B3 ^ ROTL64(B0)
+  (6 << 16) | OP_FUNCTION_CALL, TYPE_ULONG, VAR_B0_RL1, FUNC_ROTL64, VAR_B0, CONST_UINT_1,
   (5 << 16) | OP_BITWISE_XOR, TYPE_ULONG, VAR_BC3, VAR_B3, VAR_B0_RL1,
-  // BC4 = B4 ^ B1_RL1
+
+  // BC4 = B4 ^ ROTL(B1)
+  (6 << 16) | OP_FUNCTION_CALL, TYPE_ULONG, VAR_B1_RL1, FUNC_ROTL64, VAR_B1, CONST_UINT_1,
   (5 << 16) | OP_BITWISE_XOR, TYPE_ULONG, VAR_BC4, VAR_B4, VAR_B1_RL1,
 
-
-#define theta_xor_store(x,y)\
-  (5 << 16) | OP_BITWISE_XOR, TYPE_ULONG, VAR_B##x##_HS, VAR_BC##y, HASH_STATE_i##x,\
-  (3 << 16) | OP_STORE, PTR_HASH_STATE_i##x, VAR_B##x##_HS
+#define theta_xor(x,y)\
+  (5 << 16) | OP_BITWISE_XOR, TYPE_ULONG, VAR_THETA_##x, VAR_BC##y, HASH_STATE_i##x
 
   // st[0,5,10,15,20] ^= BC4
-  theta_xor_store(0,4),
-  theta_xor_store(5,4),
-  theta_xor_store(10,4),
-  theta_xor_store(15,4),
-  theta_xor_store(20,4),
+  theta_xor(0,4),
+  theta_xor(5,4),
+  theta_xor(10,4),
+  theta_xor(15,4),
+  theta_xor(20,4),
 
   // st[1,6,11,16,21] ^= BC0
-  theta_xor_store(1,0),
-  theta_xor_store(6,0),
-  theta_xor_store(11,0),
-  theta_xor_store(16,0),
-  theta_xor_store(21,0),
+  theta_xor(1,0),
+  theta_xor(6,0),
+  theta_xor(11,0),
+  theta_xor(16,0),
+  theta_xor(21,0),
 
   // st[2,7,12,17,22] ^= BC1
-  theta_xor_store(2,1),
-  theta_xor_store(7,1),
-  theta_xor_store(12,1),
-  theta_xor_store(17,1),
-  theta_xor_store(22,1),
+  theta_xor(2,1),
+  theta_xor(7,1),
+  theta_xor(12,1),
+  theta_xor(17,1),
+  theta_xor(22,1),
 
   // st[3,8,13,18,23] ^= BC2
-  theta_xor_store(3,2),
-  theta_xor_store(8,2),
-  theta_xor_store(13,2),
-  theta_xor_store(18,2),
-  theta_xor_store(23,2),
+  theta_xor(3,2),
+  theta_xor(8,2),
+  theta_xor(13,2),
+  theta_xor(18,2),
+  theta_xor(23,2),
 
   // st[4,9,14,19,24] ^= BC3
-  theta_xor_store(4,3),
-  theta_xor_store(9,3),
-  theta_xor_store(14,3),
-  theta_xor_store(19,3),
-  theta_xor_store(24,3),
+  theta_xor(4,3),
+  theta_xor(9,3),
+  theta_xor(14,3),
+  theta_xor(19,3),
+  theta_xor(24,3),
 
   // END: THETA
 
   // RHO and PHI
+#define rho(d,s,n)                                                    \
+  (6 << 16) | OP_FUNCTION_CALL, TYPE_ULONG, VAR_RHO_##d, FUNC_ROTL64, VAR_THETA_##s, CONST_UINT_##n
+
+  // identity rho(st[0]) => st[0]
+  (5 << 16) | OP_SHIFT_LEFT_LOGICAL, TYPE_ULONG, VAR_RHO_0, VAR_THETA_0, CONST_UINT_0,
+
+  rho(1,6,44),
+  rho(2,12,43),
+  rho(3,18,21),
+  rho(4,24,14),
+
+  rho(5,3,28),
+  rho(6,9,20),
+  rho(7,10,3),
+  rho(8,16,45),
+  rho(9,22,61),
+
+  rho(10,1,1),
+  rho(11,7,6),
+  rho(12,13,25),
+  rho(13,19,8),
+  rho(14,20,18),
+
+  rho(15,4,27),
+  rho(16,5,36),
+  rho(17,11,10),
+  rho(18,17,15),
+  rho(19,23,56),
+
+  rho(20,2,62),
+  rho(21,8,55),
+  rho(22,14,39),
+  rho(23,15,41),
+  rho(24,21,2),
+
+
+  // END: RHO and PHI
+
+  // CHI
+  // st[i] = ~st[i + 1] & st[i + 2]
+#define chi(x,y,z)                                                  \
+  (4 << 16) | OP_NOT, TYPE_ULONG, VAR_NOT_RHO_##y, VAR_RHO_##y,       \
+  (5 << 16) | OP_BITWISE_AND, TYPE_ULONG, VAR_CHI_S_##x, VAR_NOT_RHO_##y, VAR_RHO_##z, \
+  (5 << 16) | OP_BITWISE_XOR, TYPE_ULONG, VAR_CHI_##x, VAR_CHI_S_##x, VAR_RHO_##x, \
+  (3 << 16) | OP_STORE, PTR_HASH_STATE_i##x, VAR_CHI_##x
+
+  chi(0,1,2),
+  chi(1,2,3),
+  chi(2,3,4),
+  chi(3,4,0),
+  chi(4,0,1),
+
+  chi(5,6,7),
+  chi(6,7,8),
+  chi(7,8,9),
+  chi(8,9,5),
+  chi(9,5,6),
+
+  chi(10,11,12),
+  chi(11,12,13),
+  chi(12,13,14),
+  chi(13,14,10),
+  chi(14,10,11),
+
+  chi(15,16,17),
+  chi(16,17,18),
+  chi(17,18,19),
+  chi(18,19,15),
+  chi(19,15,16),
+
+  chi(20,21,22),
+  chi(21,22,23),
+  chi(22,23,24),
+  chi(23,24,20),
+  chi(24,20,21),
+
+  // END CHI
+
+  // IOTA
+
 
   (2 << 16) | OP_BRANCH, LABEL_LOOP_INC,
   (2 << 16) | OP_LABEL, LABEL_LOOP_INC,
@@ -358,6 +468,5 @@ const uint32_t cryptonight_keccak_shader[] = {
 };
 
 // clang-format on
-
 
 const size_t cryptonight_keccak_shader_size = sizeof(cryptonight_keccak_shader);
