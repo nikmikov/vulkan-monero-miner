@@ -32,15 +32,11 @@ endif
 
 DORENOM_CC=$(CC) $(FINAL_CFLAGS)
 DORENOM_LD=$(CC) $(FINAL_LDFLAGS)
-DORENOM_RES=$(CXX) --std=c++11
-
-
-GLSL_SHADERS=crypto/cn_init.spv crypto/cn_keccak.spv
 
 DORENOM_EXECUTABLE=dorenom
 CRYPTONIGHT_OBJS=crypto/blake.o crypto/jh.o crypto/groestl.o crypto/cryptonight/cryptonight.o crypto/keccak-tiny.o crypto/skein.o crypto/cryptonight_init_spv.o crypto/cryptonight_keccak_spv.o
 MONERO_OBJS=monero/monero_config.o monero/monero_job.o monero/monero_miner.o monero/monero_solver.o monero/monero_stratum.o  monero/monero_solver_cl.o monero/monero_solver_cpu.o monero/monero_solver_vk.o $(CRYPTONIGHT_OBJS)
-DORENOM_OBJS=buffer.o cli_opts.o config.o connection.o console.o currency.o cJSON/cJSON.o dorenom.o resources.o foreman.o miner.o stratum.o utils/opencl_err.o $(MONERO_OBJS)
+DORENOM_OBJS=buffer.o cli_opts.o config.o connection.o console.o currency.o cJSON/cJSON.o dorenom.o foreman.o miner.o stratum.o utils/opencl_err.o $(MONERO_OBJS)
 
 CRYPTO_TESTS=crypto-tests
 CRYPTO_TESTS_OBJS=crypto/crypto-tests.o $(CRYPTONIGHT_OBJS) console.o
@@ -57,18 +53,15 @@ test: $(CRYPTO_TESTS)
 %.o: %.c
 	$(DORENOM_CC) -c $< -o $@
 
-resources.o: resources.cpp
-	$(DORENOM_RES) -c $< -o $@
-
-$(DORENOM_EXECUTABLE): $(DORENOM_OBJS) $(GLSL_SHADERS)
-	$(DORENOM_LD) -o $@ $(DORENOM_OBJS) $(FINAL_LIBS)  -Wl,--format=binary -Wl,$(GLSL_SHADERS) -Wl,--format=default
+$(DORENOM_EXECUTABLE): $(DORENOM_OBJS)
+	$(DORENOM_LD) -o $@ $(DORENOM_OBJS) $(FINAL_LIBS)
 
 $(CRYPTO_TESTS): $(CRYPTO_TESTS_OBJS)
 	$(DORENOM_LD) -o $@ $^ $(FINAL_LIBS)
 
 .PHONY: clean
 clean:
-	$(RM) $(DORENOM_EXECUTABLE) $(DORENOM_OBJS) $(CRYPTO_TESTS) $(CRYPTO_TESTS_OBJS) $(GLSL_SHADERS)
+	$(RM) $(DORENOM_EXECUTABLE) $(DORENOM_OBJS) $(CRYPTO_TESTS) $(CRYPTO_TESTS_OBJS)
 
 
 release:

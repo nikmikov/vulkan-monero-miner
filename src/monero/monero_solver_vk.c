@@ -9,7 +9,6 @@
 
 #include "crypto/cryptonight_spv.h"
 #include "logging.h"
-#include "resources.h"
 
 #define CRYPTONIGHT_STATE_SIZE 200
 

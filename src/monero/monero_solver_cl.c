@@ -9,7 +9,6 @@
 
 #include "utils/opencl_inc.h"
 
-#include "resources.h"
 #include "utils/opencl_err.h"
 #include "utils/port_sleep.h"
 
@@ -493,8 +492,8 @@ bool monero_solver_cl_context_prepare_kernel(
   }
 
   log_debug("Creating CL kernel from source");
-  ctx->cryptonight_program = clCreateProgramWithSource(
-      ctx->cl_ctx, 1, &RC_CL_SOURCE_CRYPTONIGHT, NULL, &ret);
+//  ctx->cryptonight_program = clCreateProgramWithSource(
+//      ctx->cl_ctx, 1, &RC_CL_SOURCE_CRYPTONIGHT, NULL, &ret);
   if (ret != CL_SUCCESS) {
     log_error("Error when calling clCreateProgramWithSource: ",
               cl_err_str(ret));
