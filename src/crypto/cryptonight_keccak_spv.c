@@ -26,7 +26,6 @@ enum { // variables
   TYPE_PTR_UINT_INPUT,
   TYPE_PTR_UINT_FUNCTION,
   TYPE_PTR_UINT3_INPUT,
-  TYPE_ARRAY_ULONG_24,
   TYPE_ARRAY_ULONG_25,
   TYPE_PTR_ARRAY_ULONG_25,
   TYPE_RT_ARRAY_ARRAY_ULONG_25,
@@ -35,7 +34,6 @@ enum { // variables
   TYPE_PTR_BUFFER,
   TYPE_PTR_ULONG_BUFFER,
   TYPE_PTR_ULONG_FUNCTION,
-  TYPE_PTR_ARRAY_ULONG_24_FUNCTION,
 
   // constants
   CONST_UINT_0,
@@ -66,6 +64,7 @@ enum { // variables
   CONST_UINT_25,
   CONST_UINT_27,
   CONST_UINT_28,
+  CONST_UINT_31,
   CONST_UINT_36,
   CONST_UINT_39,
   CONST_UINT_41,
@@ -76,32 +75,12 @@ enum { // variables
   CONST_UINT_56,
   CONST_UINT_61,
   CONST_UINT_62,
+  CONST_UINT_63,
   CONST_UINT_64,
-  CONST_RND_0,
-  CONST_RND_1,
-  CONST_RND_2,
-  CONST_RND_3,
-  CONST_RND_4,
-  CONST_RND_5,
-  CONST_RND_6,
-  CONST_RND_7,
-  CONST_RND_8,
-  CONST_RND_9,
-  CONST_RND_10,
-  CONST_RND_11,
-  CONST_RND_12,
-  CONST_RND_13,
-  CONST_RND_14,
-  CONST_RND_15,
-  CONST_RND_16,
-  CONST_RND_17,
-  CONST_RND_18,
-  CONST_RND_19,
-  CONST_RND_20,
-  CONST_RND_21,
-  CONST_RND_22,
-  CONST_RND_23,
-  CONST_ARRAY_KECCAK_RNDC,
+  CONST_UINT_0x71,
+  CONST_UINT_0x80,
+  CONST_ULONG_0,
+  CONST_ULONG_1,
   // pointers
   PTR_GLOBAL_INVOCATION_X,
   PTR_BUFFER,
@@ -121,7 +100,7 @@ enum { // variables
 #define local_vars(x)                                                          \
   PTR_HASH_STATE_i##x, HASH_STATE_i##x, VAR_B##x, VAR_B##x##_0, VAR_B##x##_1,  \
       VAR_B##x##_2, VAR_B##x##_3, VAR_B##x##_RL1, VAR_BC##x, VAR_THETA_##x,    \
-  VAR_RHO_##x, VAR_NOT_RHO_##x, VAR_CHI_S_##x, VAR_CHI_##x
+      VAR_RHO_##x, VAR_NOT_RHO_##x, VAR_CHI_S_##x, VAR_CHI_##x
   local_vars(0),
   local_vars(1),
   local_vars(2),
@@ -147,14 +126,28 @@ enum { // variables
   local_vars(22),
   local_vars(23),
   local_vars(24),
-  PTR_KECCAK_RNDC,
-  KECCAK_RNDC,
   VAR_IOTA_0,
+
+  // keccak rndc calculation
+  PTR_LFSR,
+  LFSR_S,
+#define keccak_vars(n)                                                         \
+  LFSR_##n, LFSR_BIT_0_##n, LFSR_BIT_0_SET_##n, LFSR_AND_0x80_##n,             \
+      LFSR_BIT_7_SET_##n, LFSR_SL1_##n, LFSR_SL1_XOR_0x71_##n, KECCAK_C1_##n,  \
+      KECCAK_I_##n, KECCAK_XOR_##n
+
+  keccak_vars(0),
+  keccak_vars(1),
+  keccak_vars(3),
+  keccak_vars(7),
+  keccak_vars(15),
+  keccak_vars(31),
+  keccak_vars(63),
+
   PTR_VAR_ROUND,
   VAR_ROUND,
   VAR_ROUND_INC,
   VAR_LOOP_COND,
-  PTR_VAR_ARRAY_KECCAK_RNDC,
   BOUND
 };
 
@@ -176,8 +169,6 @@ const uint32_t cryptonight_keccak_shader[] = {
   // DECORATIONS
   (4 << 16) | OP_DECORATE, GLOBAL_INVOCATION_ID, DECOR_BUILTIN, BUILTIN_GLOBAL_INVOCATION_ID,
   (4 << 16) | OP_DECORATE, TYPE_ARRAY_ULONG_25, DECOR_ARRAY_STRIDE, 8,
-  (4 << 16) | OP_DECORATE, TYPE_ARRAY_ULONG_24, DECOR_ARRAY_STRIDE, 8,
-
   // state buffer
   (4 << 16) | OP_DECORATE, TYPE_RT_ARRAY_ARRAY_ULONG_25, DECOR_ARRAY_STRIDE, 200,
   (3 << 16) | OP_DECORATE, TYPE_STRUCT_BUFFER, DECOR_BLOCK,
@@ -223,6 +214,7 @@ const uint32_t cryptonight_keccak_shader[] = {
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_25, 25, // 25U
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_27, 27, // 27U
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_28, 28, // 28U
+  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_31, 31, // 31U
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_36, 36, // 36U
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_39, 39, // 39U
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_41, 41, // 41U
@@ -233,32 +225,13 @@ const uint32_t cryptonight_keccak_shader[] = {
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_56, 56, // 56U
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_61, 61, // 61U
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_62, 62, // 62U
+  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_63, 63, // 63U
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_64, 64, // 64U
-  // keccak round constants
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_0,  0x00000001, 0x00000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_1,  0x00008082, 0x00000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_2,  0x0000808a, 0x80000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_3,  0x80008000, 0x80000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_4,  0x0000808b, 0x00000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_5,  0x80000001, 0x00000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_6,  0x80008081, 0x80000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_7,  0x00008009, 0x80000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_8,  0x0000008a, 0x00000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_9,  0x00000088, 0x00000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_10, 0x80008009, 0x00000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_11, 0x8000000a, 0x00000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_12, 0x8000808b, 0x00000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_13, 0x0000008b, 0x80000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_14, 0x00008089, 0x80000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_15, 0x00008003, 0x80000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_16, 0x00008002, 0x80000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_17, 0x00000080, 0x80000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_18, 0x0000800a, 0x00000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_19, 0x8000000a, 0x80000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_20, 0x80008081, 0x80000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_21, 0x00008080, 0x80000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_22, 0x80000001, 0x00000000,
-  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_RND_23, 0x80008008, 0x80000000,
+  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_0x71, 0x71, // 0x71
+  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_0x80, 0x80, // 0x80
+
+  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_ULONG_0,  0x00000000, 0x00000000,
+  (5 << 16) | OP_CONSTANT, TYPE_ULONG, CONST_ULONG_1,  0x00000001, 0x00000000,
 
   // ARRAY TYPES AND POINTERS
   // globalInvocationId
@@ -266,7 +239,7 @@ const uint32_t cryptonight_keccak_shader[] = {
   (4 << 16) | OP_TYPE_POINTER, TYPE_PTR_UINT3_INPUT, SC_INPUT, TYPE_UINT3, //type: [Input] uint3*
 
   (4 << 16) | OP_TYPE_ARRAY, TYPE_ARRAY_ULONG_25, TYPE_ULONG, CONST_UINT_25, //type: ulong[25]
-  (4 << 16) | OP_TYPE_ARRAY, TYPE_ARRAY_ULONG_24, TYPE_ULONG, CONST_UINT_24, //type: ulong[24]
+
   (4 << 16) | OP_TYPE_POINTER, TYPE_PTR_ARRAY_ULONG_25, SC_BUFFER, TYPE_ARRAY_ULONG_25,
   (4 << 16) | OP_TYPE_POINTER, TYPE_PTR_ULONG_BUFFER, SC_BUFFER, TYPE_ULONG,   //type: [Buffer] ulong*
   // state buffer
@@ -277,16 +250,9 @@ const uint32_t cryptonight_keccak_shader[] = {
 
   //
   (4 << 16) | OP_TYPE_POINTER, TYPE_PTR_UINT_FUNCTION, SC_FUNCTION, TYPE_UINT,   //type: [Function] uint*
-  (4 << 16) | OP_TYPE_POINTER, TYPE_PTR_ARRAY_ULONG_24_FUNCTION, SC_FUNCTION, TYPE_ARRAY_ULONG_24,  //type: [Function] ulong[24]
 
-  // COMPOSITE CONSTANTS
-  (27 << 16)| OP_CONSTANT_COMPOSITE, TYPE_ARRAY_ULONG_24, CONST_ARRAY_KECCAK_RNDC,
-              CONST_RND_0, CONST_RND_1, CONST_RND_2, CONST_RND_3, CONST_RND_4, CONST_RND_5,
-              CONST_RND_6, CONST_RND_7, CONST_RND_8, CONST_RND_9, CONST_RND_10, CONST_RND_11,
-              CONST_RND_12, CONST_RND_13, CONST_RND_14, CONST_RND_15, CONST_RND_16, CONST_RND_17,
-              CONST_RND_18, CONST_RND_19, CONST_RND_20, CONST_RND_21, CONST_RND_22, CONST_RND_23,
   // pointer to array element
-  (4 << 16) | OP_TYPE_POINTER, TYPE_PTR_ULONG_FUNCTION, SC_FUNCTION, TYPE_ULONG,   //type: [Buffer] ulong*
+  (4 << 16) | OP_TYPE_POINTER, TYPE_PTR_ULONG_FUNCTION, SC_FUNCTION, TYPE_ULONG,   //type: [Function] ulong*
 
   // GLOBAL VARIABLES
   (4 << 16) | OP_VARIABLE, TYPE_PTR_UINT3_INPUT, GLOBAL_INVOCATION_ID, SC_INPUT,
@@ -308,8 +274,8 @@ const uint32_t cryptonight_keccak_shader[] = {
   (2 << 16) | OP_LABEL, LABEL_MAIN,
   // round variable
   (5 << 16) | OP_VARIABLE, TYPE_PTR_UINT_FUNCTION, PTR_VAR_ROUND, SC_FUNCTION, CONST_UINT_0,
-  // keccak round constants array pointer
-  (5 << 16) | OP_VARIABLE, TYPE_PTR_ARRAY_ULONG_24_FUNCTION, PTR_VAR_ARRAY_KECCAK_RNDC, SC_FUNCTION, CONST_ARRAY_KECCAK_RNDC,
+  // LFSR to calculate keccak round constants on the fly
+  (5 << 16) | OP_VARIABLE, TYPE_PTR_UINT_FUNCTION, PTR_LFSR, SC_FUNCTION, CONST_UINT_1,
   // get global invocation index
   (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_UINT_INPUT, PTR_GLOBAL_INVOCATION_X, GLOBAL_INVOCATION_ID, CONST_UINT_0,
   (4 << 16) | OP_LOAD, TYPE_UINT, GLOBAL_INVOCATION_X, PTR_GLOBAL_INVOCATION_X,
@@ -489,7 +455,7 @@ const uint32_t cryptonight_keccak_shader[] = {
   (4 << 16) | OP_NOT, TYPE_ULONG, VAR_NOT_RHO_##y, VAR_RHO_##y,       \
   (5 << 16) | OP_BITWISE_AND, TYPE_ULONG, VAR_CHI_S_##x, VAR_NOT_RHO_##y, VAR_RHO_##z, \
   (5 << 16) | OP_BITWISE_XOR, TYPE_ULONG, VAR_CHI_##x, VAR_CHI_S_##x, VAR_RHO_##x, \
-  (3 << 16) | OP_STORE, PTR_HASH_STATE_i##x, VAR_CHI_##x
+   (3 << 16) | OP_STORE, PTR_HASH_STATE_i##x, VAR_CHI_##x
 
   chi(0,1,2),
   chi(1,2,3),
@@ -523,10 +489,37 @@ const uint32_t cryptonight_keccak_shader[] = {
 
   // END CHI
 
+  // calculate keccak round constantusing LFSR
+  (4 << 16) | OP_LOAD, TYPE_UINT, LFSR_S, PTR_LFSR,
+#define KECCAK_I_S CONST_ULONG_0
+#define update_keccak_roundc(n, p)                                        \
+  /** v = lfsr & 0x01 ? v << n : v   */ \
+  (5 << 16) | OP_BITWISE_AND, TYPE_UINT, LFSR_BIT_0_##n, LFSR_##p, CONST_UINT_1, \
+  (5 << 16) | OP_INOTEQUAL, TYPE_BOOL, LFSR_BIT_0_SET_##n, LFSR_BIT_0_##n, CONST_UINT_0, \
+  (5 << 16) | OP_SHIFT_LEFT_LOGICAL, TYPE_ULONG, KECCAK_C1_##n, CONST_ULONG_1, CONST_UINT_##n, \
+  (5 << 16) | OP_BITWISE_XOR, TYPE_ULONG, KECCAK_XOR_##n, KECCAK_I_##p, KECCAK_C1_##n, \
+  (6 << 16) | OP_SELECT, TYPE_ULONG, KECCAK_I_##n, LFSR_BIT_0_SET_##n, KECCAK_XOR_##n, KECCAK_I_##p, \
+  /** Update LFSR: lfsr = lfsr & 0x80 ? (lfsr << 1) ^ 0x71 : (lfsr << 1)  */ \
+  (5 << 16) | OP_BITWISE_AND, TYPE_UINT, LFSR_AND_0x80_##n, LFSR_##p, CONST_UINT_0x80, \
+  (5 << 16) | OP_INOTEQUAL, TYPE_BOOL, LFSR_BIT_7_SET_##n, LFSR_AND_0x80_##n, CONST_UINT_0, \
+  (5 << 16) | OP_SHIFT_LEFT_LOGICAL, TYPE_UINT, LFSR_SL1_##n, LFSR_##p, CONST_UINT_1, \
+  (5 << 16) | OP_BITWISE_XOR, TYPE_UINT, LFSR_SL1_XOR_0x71_##n, LFSR_SL1_##n, CONST_UINT_0x71, \
+  (6 << 16) | OP_SELECT, TYPE_UINT, LFSR_##n, LFSR_BIT_7_SET_##n, LFSR_SL1_XOR_0x71_##n, LFSR_SL1_##n
+
+  // 7 iterations for bitPosition [0,1,3,7,15,31,63]
+  update_keccak_roundc(0, S),
+  update_keccak_roundc(1, 0),
+  update_keccak_roundc(3, 1),
+  update_keccak_roundc(7, 3),
+  update_keccak_roundc(15, 7),
+  update_keccak_roundc(31, 15),
+  update_keccak_roundc(63, 31),
+
+  // store LFSR
+  (3 << 16) | OP_STORE, PTR_LFSR, LFSR_63,
+
   // IOTA: st[0] ^= keccak_rndc[round];
-  (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_ULONG_FUNCTION, PTR_KECCAK_RNDC, PTR_VAR_ARRAY_KECCAK_RNDC, VAR_ROUND,
-  (4 << 16) | OP_LOAD, TYPE_ULONG, KECCAK_RNDC, PTR_KECCAK_RNDC,
-  (5 << 16) | OP_BITWISE_XOR, TYPE_ULONG, VAR_IOTA_0, VAR_CHI_0, KECCAK_RNDC,
+  (5 << 16) | OP_BITWISE_XOR, TYPE_ULONG, VAR_IOTA_0, VAR_CHI_0, KECCAK_I_63,
   (3 << 16) | OP_STORE, PTR_HASH_STATE_i0, VAR_IOTA_0,
 
   (2 << 16) | OP_BRANCH, LABEL_LOOP_INC,
