@@ -455,7 +455,7 @@ const uint32_t cryptonight_keccak_shader[] = {
   (4 << 16) | OP_NOT, TYPE_ULONG, VAR_NOT_RHO_##y, VAR_RHO_##y,       \
   (5 << 16) | OP_BITWISE_AND, TYPE_ULONG, VAR_CHI_S_##x, VAR_NOT_RHO_##y, VAR_RHO_##z, \
   (5 << 16) | OP_BITWISE_XOR, TYPE_ULONG, VAR_CHI_##x, VAR_CHI_S_##x, VAR_RHO_##x, \
-   (3 << 16) | OP_STORE, PTR_HASH_STATE_i##x, VAR_CHI_##x
+  (3 << 16) | OP_STORE, PTR_HASH_STATE_i##x, VAR_CHI_##x
 
   chi(0,1,2),
   chi(1,2,3),
