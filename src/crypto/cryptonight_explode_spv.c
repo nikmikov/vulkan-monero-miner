@@ -19,9 +19,11 @@ enum { // variables
   TYPE_FUNC_VOID,
   TYPE_FUNC_UINT_UINT_UINT,
   TYPE_FUNC_UINT_UINT,
+  TYPE_FUNC_UINT4_UINT4,
   TYPE_BOOL,
   TYPE_UINT,
   TYPE_UINT3,
+  TYPE_UINT4,
   TYPE_ARRAY_UINT_40,
   TYPE_ARRAY_UINT_50,
   TYPE_ARRAY_UINT_64,
@@ -39,6 +41,7 @@ enum { // variables
   TYPE_PTR_IN_UINT3,
   TYPE_PTR_FN_ARRAY_UINT_64,
   TYPE_PTR_FN_UINT,
+  TYPE_PTR_FN_UINT4,
   TYPE_PTR_BF_UINT,
   TYPE_PTR_BF_RT_ARRAY_ARRAY_UINT_50,
   TYPE_PTR_BF_RT_ARRAY_ARRAY_UINT_2097152,
@@ -70,7 +73,7 @@ enum { // variables
   FUNC_AES_SUB_WORD,
   AES_SUB_WORD_ARG,
   LABEL_AES_SUB_WORD,
-#define aes_sub_word_vars(o)                                                  \
+#define aes_sub_word_vars(o)                                                   \
   AES_SUB_WORD_X_##o, PTR_AES_SUB_WORD_Y_##o, AES_SUB_WORD_Y_##o,              \
       AES_SUB_WORD_Y_SL_##o
 
@@ -84,6 +87,57 @@ enum { // variables
   AES_SUB_WORD_Y_OR_0_8_16_24,
   AES_SUB_WORD_RESULT,
 
+  // aes_encode
+  FUNC_AES_ENCODE,
+  PTR_AES_ENCODE_ARG,
+  LABEL_AES_ENCODE,
+  PTR_AES_ENCODE_LOOP_I,
+  LABEL_LOOP_AES_ENCODE,
+  LABEL_LOOP_AES_ENCODE_END,
+  LABEL_LOOP_AES_ENCODE_INC,
+  LABEL_LOOP_AES_ENCODE_COND,
+  VAL_AES_ENCODE_LOOP_I,
+  VAL_LOOP_AES_ENCODE_COND,
+  LABEL_LOOP_AES_ENCODE_BODY,
+
+#define aes_encode_load_k_vars(k)                                              \
+  VAL_AES_ENCODE_LOOP_I_PLUS_##k, PTR_VAL_AES_ENCODE_K_##k,                    \
+      VAL_AES_ENCODE_RESULT_##k##_K, PTR_VAL_AES_ENCODE_ARG_##k,               \
+      VAL_AES_ENCODE_ARG_##k
+
+  aes_encode_load_k_vars(0),
+  aes_encode_load_k_vars(1),
+  aes_encode_load_k_vars(2),
+  aes_encode_load_k_vars(3),
+  VAL_AES_ENCODE_LOOP_I_PLUS_4,
+
+#define aes_encode_vars(x, y, k, i)                                            \
+  PTR_AES_ENCODE_IDX_##x##_##y, VAL_AES_ENCODE_IDX_##x##_##y,                  \
+      PTR_AES_ENCODE_AES_##x##_##y, VAL_AES_ENCODE_AES_##x##_##y,              \
+      VAL_AES_ENCODE_RESULT_##i##_##k
+
+  aes_encode_vars(0,0,0,0),
+  aes_encode_vars(1,8,1,0),
+  aes_encode_vars(2,16,2,0),
+  aes_encode_vars(3,24,3,0),
+
+  aes_encode_vars(0,8,0,1),
+  aes_encode_vars(1,16,1,1),
+  aes_encode_vars(2,24,2,1),
+  aes_encode_vars(3,0,3,1),
+
+  aes_encode_vars(0,16,0,2),
+  aes_encode_vars(1,24,1,2),
+  aes_encode_vars(2,0,2,2),
+  aes_encode_vars(3,8,3,2),
+
+  aes_encode_vars(0,24,0,3),
+  aes_encode_vars(1,0,1,3),
+  aes_encode_vars(2,8,2,3),
+  aes_encode_vars(3,16,3,3),
+
+  VAL_AES_ENCODE_ROUND,
+  AES_ENCODE_RESULT,
   // main: local variables
   GLOBAL_INVOCATION_X,
   LOCAL_INVOCATION_X,
@@ -94,9 +148,11 @@ enum { // variables
   CONST_UINT_1,
   CONST_UINT_2,
   CONST_UINT_3,
+  CONST_UINT_4,
   CONST_UINT_5,
   CONST_UINT_7,
   CONST_UINT_8,
+  CONST_UINT_10,
   CONST_UINT_16,
   CONST_UINT_24,
   CONST_UINT_32,
@@ -213,15 +269,18 @@ const uint32_t cryptonight_explode_shader[] = {
   (2 << 16) | OP_TYPE_BOOL, TYPE_BOOL,                    //type: bool
   (4 << 16) | OP_TYPE_INT, TYPE_UINT, 32, 0,              //type: uint
   (4 << 16) | OP_TYPE_VECTOR, TYPE_UINT3, TYPE_UINT, 3,   //type: uvec3
+  (4 << 16) | OP_TYPE_VECTOR, TYPE_UINT4, TYPE_UINT, 4,   //type: uvec4
 
   // CONST scalar
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_0, 0, // 0U
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_1, 1, // 1U
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_2, 2, // 2U
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_3, 3, // 3U
+  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_4, 4, // 4U
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_5, 5, // 5U
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_7, 7, // 7U
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_8, 8, // 8U
+  (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_10, 10, // 10U
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_16, 16, // 16U
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_24, 24, // 24U
   (4 << 16) | OP_CONSTANT, TYPE_UINT, CONST_UINT_32, 32, // 32U
@@ -256,6 +315,7 @@ const uint32_t cryptonight_explode_shader[] = {
   (4 << 16) | OP_TYPE_POINTER, TYPE_PTR_IN_UINT3, SC_INPUT, TYPE_UINT3, //type: [Input] uint3*
   (4 << 16) | OP_TYPE_POINTER, TYPE_PTR_FN_ARRAY_UINT_64, SC_FUNCTION, TYPE_ARRAY_UINT_64,
   (4 << 16) | OP_TYPE_POINTER, TYPE_PTR_FN_UINT, SC_FUNCTION, TYPE_UINT,   //type: [Function] uint*
+  (4 << 16) | OP_TYPE_POINTER, TYPE_PTR_FN_UINT4, SC_FUNCTION, TYPE_UINT4,   //type: [Function] uint4*
   (4 << 16) | OP_TYPE_POINTER, TYPE_PTR_BF_UINT, SC_BUFFER, TYPE_UINT,   //type: [Buffer] uint*
   (4 << 16) | OP_TYPE_POINTER, TYPE_PTR_BF_RT_ARRAY_ARRAY_UINT_50, SC_BUFFER, TYPE_RT_ARRAY_ARRAY_UINT_50,
   (4 << 16) | OP_TYPE_POINTER, TYPE_PTR_BF_RT_ARRAY_ARRAY_UINT_2097152, SC_BUFFER, TYPE_RT_ARRAY_ARRAY_UINT_2097152,
@@ -268,7 +328,7 @@ const uint32_t cryptonight_explode_shader[] = {
   (3 << 16) | OP_TYPE_FUNCTION, TYPE_FUNC_VOID, TYPE_VOID,//type: void fn()
   (4 << 16) | OP_TYPE_FUNCTION, TYPE_FUNC_UINT_UINT, TYPE_UINT, TYPE_UINT,  //type: uint fn(uint)
   (5 << 16) | OP_TYPE_FUNCTION, TYPE_FUNC_UINT_UINT_UINT, TYPE_UINT, TYPE_UINT, TYPE_UINT,  //type: uint fn(uint,uint)
-
+  (4 << 16) | OP_TYPE_FUNCTION, TYPE_FUNC_UINT4_UINT4, TYPE_UINT4, TYPE_PTR_FN_UINT4,  //type: uint4 fn(uint4*)
 
   // GLOBAL VARIABLES
   (4 << 16) | OP_VARIABLE, TYPE_PTR_IN_UINT3, GLOBAL_INVOCATION_ID, SC_INPUT,
@@ -296,14 +356,14 @@ const uint32_t cryptonight_explode_shader[] = {
   (2 << 16) | OP_RETURN_VALUE, ROTL_RESULT,
   (1 << 16) | OP_FUNCTION_END,
 
-  // uint aes_sub_word(uint key)
+  // FUNCTION :uint aes_sub_word(uint key)
   //    return (AES_0[BYTE3(key)] << 24) | (AES_0[BYTE2(key)] << 16) | (AES_0[BYTE1(key)] << 8) | AES_0[BYTE0(key)];
   (5 << 16) | OP_FUNCTION, TYPE_UINT, FUNC_AES_SUB_WORD, FNC_INLINE, TYPE_FUNC_UINT_UINT,
   (3 << 16) | OP_FUNCTION_PARAMETER, TYPE_UINT, AES_SUB_WORD_ARG,
   (2 << 16) | OP_LABEL, LABEL_AES_SUB_WORD,
 
 #define aes_sbox_get_byte(o) \
-  (6 << 16) | OP_BITFIELD_UEXTRACT, TYPE_UINT, AES_SUB_WORD_X_##o, AES_SUB_WORD_ARG, CONST_UINT_0, CONST_UINT_##o, \
+  (6 << 16) | OP_BITFIELD_UEXTRACT, TYPE_UINT, AES_SUB_WORD_X_##o, AES_SUB_WORD_ARG, CONST_UINT_8, CONST_UINT_##o, \
   (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_WG_UINT, PTR_AES_SUB_WORD_Y_##o, AES_0, AES_SUB_WORD_X_##o, \
   (4 << 16) | OP_LOAD, TYPE_UINT, AES_SUB_WORD_Y_##o, PTR_AES_SUB_WORD_Y_##o, \
   (5 << 16) | OP_SHIFT_LEFT_LOGICAL, TYPE_UINT, AES_SUB_WORD_Y_SL_##o, AES_SUB_WORD_Y_##o, CONST_UINT_##o
@@ -318,6 +378,80 @@ const uint32_t cryptonight_explode_shader[] = {
   (5 << 16) | OP_BITWISE_OR, TYPE_UINT, AES_SUB_WORD_RESULT, AES_SUB_WORD_Y_OR_0_8_16, AES_SUB_WORD_Y_SL_24,
 
   (2 << 16) | OP_RETURN_VALUE, AES_SUB_WORD_RESULT,
+  (1 << 16) | OP_FUNCTION_END,
+
+  // perform 10 aes rounds with AES_KEY, using AES_0, AES_1, AES_2, AES_3 tables
+  // FUNCTION : uint4 aes_encode(uint4)
+  (5 << 16) | OP_FUNCTION, TYPE_UINT4, FUNC_AES_ENCODE, FNC_INLINE, TYPE_FUNC_UINT4_UINT4,
+  (3 << 16) | OP_FUNCTION_PARAMETER, TYPE_PTR_FN_UINT4, PTR_AES_ENCODE_ARG,
+  (2 << 16) | OP_LABEL, LABEL_AES_ENCODE,
+  (5 << 16) | OP_VARIABLE, TYPE_PTR_FN_UINT, PTR_AES_ENCODE_LOOP_I, SC_FUNCTION, CONST_UINT_0,
+
+  (2 << 16) | OP_BRANCH, LABEL_LOOP_AES_ENCODE,
+  (2 << 16) | OP_LABEL, LABEL_LOOP_AES_ENCODE,
+  (4 << 16) | OP_LOOP_MERGE, LABEL_LOOP_AES_ENCODE_END, LABEL_LOOP_AES_ENCODE_INC, LC_UNROLL,
+  (2 << 16) | OP_BRANCH, LABEL_LOOP_AES_ENCODE_COND,
+  (2 << 16) | OP_LABEL, LABEL_LOOP_AES_ENCODE_COND,
+  (4 << 16) | OP_LOAD, TYPE_UINT, VAL_AES_ENCODE_LOOP_I, PTR_AES_ENCODE_LOOP_I,
+  (5 << 16) | OP_ULESS_THAN, TYPE_BOOL, VAL_LOOP_AES_ENCODE_COND, VAL_AES_ENCODE_LOOP_I, CONST_UINT_10, // i < 40 ?
+  (4 << 16) | OP_BRANCH_CONDITIONAL, VAL_LOOP_AES_ENCODE_COND, LABEL_LOOP_AES_ENCODE_BODY, LABEL_LOOP_AES_ENCODE_END,
+  (2 << 16) | OP_LABEL, LABEL_LOOP_AES_ENCODE_BODY,
+
+#define aes_encode_load_k(k)                                            \
+  (5 << 16) | OP_IADD, TYPE_UINT, VAL_AES_ENCODE_LOOP_I_PLUS_##k, VAL_AES_ENCODE_LOOP_I, CONST_UINT_##k,            \
+  (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_WG_UINT, PTR_VAL_AES_ENCODE_K_##k, AES_KEY, VAL_AES_ENCODE_LOOP_I_PLUS_##k, \
+  (4 << 16) | OP_LOAD, TYPE_UINT, VAL_AES_ENCODE_RESULT_##k##_K, PTR_VAL_AES_ENCODE_K_##k,\
+  (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_FN_UINT, PTR_VAL_AES_ENCODE_ARG_##k, PTR_AES_ENCODE_ARG, CONST_UINT_##k, \
+  (4 << 16) | OP_LOAD, TYPE_UINT, VAL_AES_ENCODE_ARG_##k, PTR_VAL_AES_ENCODE_ARG_##k
+
+  aes_encode_load_k(0),
+  aes_encode_load_k(1),
+  aes_encode_load_k(2),
+  aes_encode_load_k(3),
+
+#define aes_encode_lookup_table(x,o,k,i)                               \
+  (6 << 16) | OP_BITFIELD_UEXTRACT, TYPE_UINT, VAL_AES_ENCODE_IDX_##x##_##o, VAL_AES_ENCODE_ARG_##x, CONST_UINT_8, CONST_UINT_##o, \
+  (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_WG_UINT, PTR_AES_ENCODE_AES_##x##_##o, AES_##x, VAL_AES_ENCODE_IDX_##x##_##o, \
+  (4 << 16) | OP_LOAD, TYPE_UINT, VAL_AES_ENCODE_AES_##x##_##o, PTR_AES_ENCODE_AES_##x##_##o, \
+  (5 << 16) | OP_BITWISE_XOR, TYPE_UINT, VAL_AES_ENCODE_RESULT_##i##_##x, VAL_AES_ENCODE_RESULT_##i##_##k, VAL_AES_ENCODE_AES_##x##_##o
+
+  // AES0[BYTE0(i0)] ^ AES1[BYTE1(i1)] ^ AES2[BYTE2(i2)] ^ AES3[BYTE3(i3)] ^ k[0]
+  aes_encode_lookup_table(0,0,K,0),
+  aes_encode_lookup_table(1,8,0,0),
+  aes_encode_lookup_table(2,16,1,0),
+  aes_encode_lookup_table(3,24,2,0),
+
+  // AES0[BYTE1(i0)] ^ AES1[BYTE2(i1)] ^ AES2[BYTE3(i2)] ^ AES3[BYTE0(i3)] ^ k[1]
+  aes_encode_lookup_table(0,8,K,1),
+  aes_encode_lookup_table(1,16,0,1),
+  aes_encode_lookup_table(2,24,1,1),
+  aes_encode_lookup_table(3,0,2,1),
+
+  // AES0[BYTE2(i0)] ^ AES1[BYTE3(i1)] ^ AES2[BYTE0(i2)] ^ AES3[BYTE1(i3)] ^ k[2]
+  aes_encode_lookup_table(0,16,K,2),
+  aes_encode_lookup_table(1,24,0,2),
+  aes_encode_lookup_table(2,0,1,2),
+  aes_encode_lookup_table(3,8,2,2),
+
+  // AES0[BYTE3(i0)] ^ AES1[BYTE0(i1)] ^ AES2[BYTE1(i2)] ^ AES3[BYTE2(i3)] ^ k[3]
+  aes_encode_lookup_table(0,24,K,3),
+  aes_encode_lookup_table(1,0,0,3),
+  aes_encode_lookup_table(2,8,1,3),
+  aes_encode_lookup_table(3,16,2,3),
+
+  (7 << 16) | OP_COMPOSITE_CONSTRUCT, TYPE_UINT4, VAL_AES_ENCODE_ROUND, VAL_AES_ENCODE_RESULT_0_3, VAL_AES_ENCODE_RESULT_1_3,
+              VAL_AES_ENCODE_RESULT_2_3, VAL_AES_ENCODE_RESULT_3_3,
+  (3 << 16) | OP_STORE, PTR_AES_ENCODE_ARG, VAL_AES_ENCODE_ROUND,
+
+  (2 << 16) | OP_BRANCH, LABEL_LOOP_AES_ENCODE_INC,
+  (2 << 16) | OP_LABEL, LABEL_LOOP_AES_ENCODE_INC,
+  (5 << 16) | OP_IADD, TYPE_UINT, VAL_AES_ENCODE_LOOP_I_PLUS_4, VAL_AES_ENCODE_LOOP_I, CONST_UINT_4,
+  (3 << 16) | OP_STORE, PTR_AES_ENCODE_LOOP_I, VAL_AES_ENCODE_LOOP_I_PLUS_4,
+  (2 << 16) | OP_BRANCH, LABEL_LOOP_AES_ENCODE,
+  (2 << 16) | OP_LABEL, LABEL_LOOP_AES_ENCODE_END,
+
+  (4 << 16) | OP_LOAD, TYPE_UINT4, AES_ENCODE_RESULT, PTR_AES_ENCODE_ARG,
+  (2 << 16) | OP_RETURN_VALUE, AES_ENCODE_RESULT,
   (1 << 16) | OP_FUNCTION_END,
 
 
@@ -449,6 +583,10 @@ const uint32_t cryptonight_explode_shader[] = {
   (2 << 16) | OP_LABEL, LABEL_LOOP_GEN_AES_KEY_END,
   // end aes gen key loop
   (4 << 16) | OP_CONTROL_BARRIER, CONST_UINT_2, CONST_UINT_2, CONST_UINT_256,
+
+  // The bytes 64..191 are extracted from the Keccak final state and split into 8 blocks of 16 bytes each.
+  // 1 block ber local thread
+
 
   // main:return
   (1 << 16) | OP_RETURN,
