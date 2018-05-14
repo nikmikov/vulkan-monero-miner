@@ -14,7 +14,12 @@
 
 enum BUFFERS { INPUT_BUFFER = 0, STATE_BUFFER, SCRATCHPAD_BUFFER, NUM_BUFFERS };
 
-enum PIPELINES { PIPELINE_INIT = 0, PIPELINE_KECCAK, NUM_COMPUTE_PIPELINES };
+enum PIPELINES {
+  PIPELINE_INIT = 0,
+  PIPELINE_KECCAK,
+  PIPELINE_EXPLODE,
+  NUM_COMPUTE_PIPELINES
+};
 
 struct monero_solver_vk_context {
   uint32_t device_idx;
@@ -184,9 +189,11 @@ monero_solver_new_vk(const struct monero_config_solver_vk *cfg)
 {
   ////////////////////////////// TEMORARY DEBUG ///////////////////////////
 #if 0
-  log_info("Dumping shader: %p: %lu", cryptonight_keccak_shader, cryptonight_keccak_shader_size);
+  log_info("Dumping shader: %p: %lu", cryptonight_keccak_shader,
+           cryptonight_keccak_shader_size);
   FILE *f = fopen("/home/fedor/src/dorenom/src/crypto/binary.spv", "w");
-  fwrite((void*)cryptonight_keccak_shader, 1, cryptonight_keccak_shader_size,  f);
+  fwrite((void *)cryptonight_explode_shader, 1, cryptonight_explode_shader_size,
+         f);
   fclose(f);
   log_info("Wrote %lu, bytes", cryptonight_keccak_shader_size);
   exit(1);
@@ -554,7 +561,7 @@ bool monero_solver_vk_context_prepare_pipelines(
       cryptonight_init_shader_size, cryptonight_init_shader};
 
   vk_res = vkCreateShaderModule(vk->device, &cn_init_create_info, 0,
-                                &vk->compute_shader[0]);
+                                &vk->compute_shader[PIPELINE_INIT]);
   if (vk_res != VK_SUCCESS) {
     log_error("Error when calling vkCreateShaderModule for cn_init shader");
     return false;
@@ -564,15 +571,27 @@ bool monero_solver_vk_context_prepare_pipelines(
   VkShaderModuleCreateInfo cn_keccak_create_info = {
       VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, 0, 0,
       cryptonight_keccak_shader_size, cryptonight_keccak_shader};
-  //(spv_cn_keccak_end - spv_cn_keccak), (uint32_t *)spv_cn_keccak};
 
   vk_res = vkCreateShaderModule(vk->device, &cn_keccak_create_info, 0,
-                                &vk->compute_shader[1]);
+                                &vk->compute_shader[PIPELINE_KECCAK]);
   if (vk_res != VK_SUCCESS) {
     log_error("Error when calling vkCreateShaderModule for `cn_keccak` shader");
     return false;
   }
   log_debug("`cn_keccak` shader initialized");
+
+  VkShaderModuleCreateInfo cn_explode_create_info = {
+      VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, 0, 0,
+      cryptonight_explode_shader_size, cryptonight_explode_shader};
+
+  vk_res = vkCreateShaderModule(vk->device, &cn_explode_create_info, 0,
+                                &vk->compute_shader[PIPELINE_EXPLODE]);
+  if (vk_res != VK_SUCCESS) {
+    log_error(
+        "Error when calling vkCreateShaderModule for `cn_explode` shader");
+    return false;
+  }
+  log_debug("`cn_explode` shader initialized");
 
   // descriptors set
   VkDescriptorSetLayoutBinding input_descriptor_set_layout_bindings[2] = {
@@ -584,11 +603,18 @@ bool monero_solver_vk_context_prepare_pipelines(
       {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
        0}};
 
-  VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info[2] = {
+  VkDescriptorSetLayoutBinding explode_descriptor_set_layout_bindings[2] = {
+      {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, 0},
+      {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
+       0}};
+
+  VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info[3] = {
       {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, 0, 0, 2,
        input_descriptor_set_layout_bindings},
       {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, 0, 0, 1,
-       keccak_descriptor_set_layout_bindings}};
+       keccak_descriptor_set_layout_bindings},
+      {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, 0, 0, 2,
+       explode_descriptor_set_layout_bindings}};
 
   for (size_t k = 0; k < NUM_COMPUTE_PIPELINES; ++k) {
     vk_res = vkCreateDescriptorSetLayout(vk->device,
@@ -646,16 +672,17 @@ bool monero_solver_vk_context_prepare_command_buffer(
 {
   VkResult vk_res;
 
-  VkDescriptorPoolSize descriptor_pool_size[2] = {
+  VkDescriptorPoolSize descriptor_pool_size[NUM_COMPUTE_PIPELINES] = {
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2},
       {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
-      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3}};
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2}};
 
   VkDescriptorPoolCreateInfo descriptor_pool_create_info = {
       VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
       NULL,
       0,
       NUM_COMPUTE_PIPELINES,
-      2,
+      NUM_COMPUTE_PIPELINES,
       descriptor_pool_size};
 
   vk_res = vkCreateDescriptorPool(vk->device, &descriptor_pool_create_info, 0,
@@ -685,18 +712,36 @@ bool monero_solver_vk_context_prepare_command_buffer(
   }
 
   VkWriteDescriptorSet input_write_descriptor_set[2] = {
-      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, vk->descriptor_set[0], 0,
-       0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[0], NULL},
-      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, vk->descriptor_set[0], 1,
-       0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[1], NULL}};
+      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL,
+       vk->descriptor_set[PIPELINE_INIT], 0, 0, 1,
+       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[INPUT_BUFFER],
+       NULL},
+      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL,
+       vk->descriptor_set[PIPELINE_INIT], 1, 0, 1,
+       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[STATE_BUFFER],
+       NULL}};
 
   vkUpdateDescriptorSets(vk->device, 2, input_write_descriptor_set, 0, NULL);
 
   VkWriteDescriptorSet keccak_write_descriptor_set[1] = {
-      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, vk->descriptor_set[1], 0,
-       0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[1], NULL}};
+      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL,
+       vk->descriptor_set[PIPELINE_KECCAK], 0, 0, 1,
+       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[STATE_BUFFER],
+       NULL}};
 
   vkUpdateDescriptorSets(vk->device, 1, keccak_write_descriptor_set, 0, NULL);
+
+  VkWriteDescriptorSet explode_write_descriptor_set[2] = {
+      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL,
+       vk->descriptor_set[PIPELINE_EXPLODE], 0, 0, 1,
+       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[STATE_BUFFER],
+       NULL},
+      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL,
+       vk->descriptor_set[PIPELINE_EXPLODE], 1, 0, 1,
+       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[SCRATCHPAD_BUFFER],
+       NULL}};
+
+  vkUpdateDescriptorSets(vk->device, 2, explode_write_descriptor_set, 0, NULL);
 
   // record commands
   VkCommandBufferBeginInfo command_buffer_begin_info = {
@@ -730,6 +775,17 @@ bool monero_solver_vk_context_prepare_command_buffer(
       0,
       VK_WHOLE_SIZE};
 
+  VkBufferMemoryBarrier scratchpad_buffer_barrier = {
+      VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+      NULL,
+      VK_ACCESS_SHADER_WRITE_BIT,
+      VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+      VK_QUEUE_FAMILY_IGNORED,
+      VK_QUEUE_FAMILY_IGNORED,
+      vk->buffer[SCRATCHPAD_BUFFER],
+      0,
+      VK_WHOLE_SIZE};
+
   vkCmdPipelineBarrier(vk->cmd_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL, 1,
                        &state_buffer_barrier, 0, NULL);
@@ -742,6 +798,23 @@ bool monero_solver_vk_context_prepare_command_buffer(
                           &vk->descriptor_set[PIPELINE_KECCAK], 0, 0);
 
   vkCmdDispatch(vk->cmd_buffer, parallelism, 1, 1);
+
+  vkCmdPipelineBarrier(vk->cmd_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                       VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL, 1,
+                       &state_buffer_barrier, 0, NULL);
+
+  vkCmdBindPipeline(vk->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                    vk->pipeline[PIPELINE_EXPLODE]);
+
+  vkCmdBindDescriptorSets(vk->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                          vk->pipeline_layout[PIPELINE_EXPLODE], 0, 1,
+                          &vk->descriptor_set[PIPELINE_EXPLODE], 0, 0);
+
+  vkCmdPipelineBarrier(vk->cmd_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                       VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL, 1,
+                       &scratchpad_buffer_barrier, 0, NULL);
+
+  vkCmdDispatch(vk->cmd_buffer, parallelism, 8, 1);
 
   vk_res = vkEndCommandBuffer(vk->cmd_buffer);
 
