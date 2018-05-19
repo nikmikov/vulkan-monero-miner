@@ -8,6 +8,7 @@
 #include <vulkan/vulkan.h>
 
 #include "crypto/cryptonight_spv.h"
+#include "crypto/cryptonight/cryptonight.h"
 #include "logging.h"
 
 #define CRYPTONIGHT_STATE_SIZE 200
@@ -36,6 +37,7 @@ struct monero_solver_vk_context {
   VkBuffer buffer[NUM_BUFFERS];
   void *input_mmapped;
   void *output_mmapped;
+  void *scratchpad_mmapped;
 
   // shaders
   VkCommandBuffer cmd_buffer;
@@ -161,18 +163,28 @@ int monero_solver_vk_process(struct monero_solver *ptr, uint32_t nonce_from)
 #define __VERIFY_VK_
 #ifdef __VERIFY_VK_
 
-  uint8_t keccak_state[CRYPTONIGHT_STATE_SIZE];
+  struct cryptonight_ctx *cryptonight_ctx = cryptonight_ctx_new();
+  struct cryptonight_hash output_cpu;
+
   log_debug("Verifying results");
   for (size_t k = 0; k < solver->parallelism; ++k) {
+
     *(uint32_t *)&solver->input_hash[MONERO_NONCE_POSITION] = nonce_from + k;
-    keccak_256(keccak_state, CRYPTONIGHT_STATE_SIZE, solver->input_hash,
-               solver->input_hash_len);
-    print_debug("FINAL HASH CPU: ", keccak_state, 200);
+//    keccak_256(keccak_state, CRYPTONIGHT_STATE_SIZE, solver->input_hash,
+//               solver->input_hash_len);
+
+    cryptonight_aesni(solver->input_hash, solver->input_hash_len,
+                      &output_cpu, cryptonight_ctx);
+
+
+    print_debug("FINAL HASH CPU: ", &output_cpu, 200);
+
+
     uint8_t *output =
-        (uint8_t *)vk->output_mmapped + k * CRYPTONIGHT_STATE_SIZE;
+      (uint8_t *)vk->scratchpad_mmapped + k * MONERO_CRYPTONIGHT_MEMORY;
     print_debug("FINAL HASH VK:: ", output, 200);
 
-    if (memcmp(output, keccak_state, 200) != 0) {
+    if (memcmp(output, &output_cpu, 200) != 0) {
       log_error("Don't match: %lu", k);
     } else {
       log_info("Match: %lu", k);
@@ -475,7 +487,9 @@ bool monero_solver_vk_context_prepare_buffers(
           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT};
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT};
+  //      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT};
 
   const VkBufferCreateInfo buffer_create_info[3] = {
       {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, 0, 0, buffer_size[0],
@@ -545,6 +559,16 @@ bool monero_solver_vk_context_prepare_buffers(
 
   if (vk_res != VK_SUCCESS) {
     log_error("Error when calling vkMapMemory for output buffer: %d",
+              (int)vk_res);
+    return false;
+  }
+
+  // TODO: remove temporary debug
+  vk_res = vkMapMemory(vk->device, vk->memory[SCRATCHPAD_BUFFER], 0, VK_WHOLE_SIZE,
+                       0, &vk->scratchpad_mmapped);
+
+  if (vk_res != VK_SUCCESS) {
+    log_error("Error when calling vkMapMemory for scratchpad buffer: %d",
               (int)vk_res);
     return false;
   }
@@ -810,11 +834,12 @@ bool monero_solver_vk_context_prepare_command_buffer(
                           vk->pipeline_layout[PIPELINE_EXPLODE], 0, 1,
                           &vk->descriptor_set[PIPELINE_EXPLODE], 0, 0);
 
+  vkCmdDispatch(vk->cmd_buffer, parallelism, 1, 1);
+
   vkCmdPipelineBarrier(vk->cmd_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL, 1,
                        &scratchpad_buffer_barrier, 0, NULL);
 
-  vkCmdDispatch(vk->cmd_buffer, parallelism, 8, 1);
 
   vk_res = vkEndCommandBuffer(vk->cmd_buffer);
 
