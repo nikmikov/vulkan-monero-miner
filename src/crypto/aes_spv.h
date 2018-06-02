@@ -218,7 +218,7 @@
   aes_gen_tables_const0_rotate(3,24,8),                                                        \
                                                                                                \
   (5 << 16) | OP_IADD, TYPE_UINT, AES_GEN_TABLES__I_INC,                                       \
-              AES_GEN_TABLES__I, LOCAL_SIZE_X, /* ; i += local_size */                         \
+              AES_GEN_TABLES__I, CONST_UINT_8, /* ; i += local_size */                         \
   (2 << 16) | OP_BRANCH, AES_GEN_TABLES__LABEL_LOOP,                                           \
   (2 << 16) | OP_LABEL, AES_GEN_TABLES__LABEL_LOOP_END
 

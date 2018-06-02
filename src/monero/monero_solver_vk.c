@@ -205,7 +205,7 @@ monero_solver_new_vk(const struct monero_config_solver_vk *cfg)
   log_info("Dumping shader: %p: %lu", cryptonight_memloop_shader,
            cryptonight_memloop_shader_size);
   FILE *f = fopen("/home/fedor/src/dorenom/src/crypto/binary.spv", "w");
-  fwrite((void *)cryptonight_memloop_shader, 1, cryptonight_memloop_shader_size,
+  fwrite((void *)cryptonight_keccak_shader, 1, cryptonight_keccak_shader_size,
          f);
   fclose(f);
   log_info("Wrote %lu, bytes", cryptonight_memloop_shader_size);
@@ -268,6 +268,26 @@ monero_solver_vk_context_init(uint32_t device_idx)
   struct monero_solver_vk_context *ctx =
       calloc(1, sizeof(struct monero_solver_vk_context));
 
+#ifndef NDEBUG
+  const char *enabled_layers[] = {
+    "VK_LAYER_LUNARG_standard_validation"
+  };
+  uint32_t enabled_layers_count = sizeof(enabled_layers) / sizeof(const char *);
+
+  const char *enabled_extensions[] = {
+    VK_EXT_DEBUG_REPORT_EXTENSION_NAME
+  };
+  const uint32_t enabled_extensions_count =
+      sizeof(enabled_extensions) / sizeof(char *);
+
+#else
+  const char **enabled_layers = NULL;
+  uint32_t enabled_layers_count = 0;
+  const char **enabled_extensions = NULL;
+  const uint32_t enabled_extensions_count = 0;
+#endif
+
+  log_info("Extensions: %u, layers: %u", enabled_extensions_count, enabled_layers_count);
   const VkApplicationInfo application_info = {
       VK_STRUCTURE_TYPE_APPLICATION_INFO,
       0,
@@ -275,24 +295,24 @@ monero_solver_vk_context_init(uint32_t device_idx)
       0,
       "",
       0,
-      VK_MAKE_VERSION(1, 0, 9)};
+      VK_MAKE_VERSION(1, 1, 76)};
 
   const VkInstanceCreateInfo instance_create_info = {
-      VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-      0,
-      0,
-      &application_info,
-      0,
-      0,
-      0,
-      0};
+      .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+      .pNext = NULL,
+      .flags = 0,
+      .pApplicationInfo = &application_info,
+      .enabledLayerCount = enabled_layers_count,
+      .ppEnabledLayerNames = enabled_layers,
+      .enabledExtensionCount = enabled_extensions_count,
+      .ppEnabledExtensionNames = enabled_extensions};
 
   VkResult vk_res;
 
   // create instance
   vk_res = vkCreateInstance(&instance_create_info, 0, &ctx->instance);
   if (vk_res != VK_SUCCESS) {
-    log_error("Error when calling vkCreateInstance");
+    log_error("Error when calling vkCreateInstance: %d", (int)vk_res);
     goto ERROR;
   }
 
@@ -359,11 +379,22 @@ monero_solver_vk_context_init(uint32_t device_idx)
     goto ERROR;
   }
 
+  // enable optional device features
+  VkPhysicalDeviceFeatures enabled_device_features = {0};
+  enabled_device_features.shaderInt64 = VK_TRUE;
+
   // Create logical device
-  VkDeviceCreateInfo device_create_info = {0};
-  device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  device_create_info.queueCreateInfoCount = 1;
-  device_create_info.pQueueCreateInfos = &queue_create_info;
+  VkDeviceCreateInfo device_create_info = {
+    .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+    .pNext = NULL,
+    .flags = 0,
+    .queueCreateInfoCount = 1,
+    .pQueueCreateInfos = &queue_create_info,
+    .enabledExtensionCount = 0,
+    .ppEnabledExtensionNames = NULL,
+    .pEnabledFeatures = &enabled_device_features
+  };
+
   vk_res = vkCreateDevice(ctx->physical_device, &device_create_info, NULL,
                           &ctx->device);
   if (vk_res != VK_SUCCESS) {
@@ -665,7 +696,6 @@ bool monero_solver_vk_context_prepare_pipelines(
     vk_res = vkCreateDescriptorSetLayout(vk->device,
                                          &descriptor_set_layout_create_info[k],
                                          NULL, &vk->descriptor_set_layout[k]);
-
     if (vk_res != VK_SUCCESS) {
       log_error(
           "Error when calling vkCreateDescriptorSetLayout for shader #%lu", k);
@@ -674,13 +704,13 @@ bool monero_solver_vk_context_prepare_pipelines(
 
     // pipeline layouts
     VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
-        VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        0,
-        0,
-        1,
-        &vk->descriptor_set_layout[k],
-        0,
-        0};
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .setLayoutCount = 1,
+        .pSetLayouts = &vk->descriptor_set_layout[k],
+        .pushConstantRangeCount = 0,
+        .pPushConstantRanges = NULL};
 
     vk_res = vkCreatePipelineLayout(vk->device, &pipeline_layout_create_info,
                                     NULL, &vk->pipeline_layout[k]);
@@ -691,17 +721,24 @@ bool monero_solver_vk_context_prepare_pipelines(
     }
 
     VkComputePipelineCreateInfo compute_pipeline_create_info = {
-        VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-        0,
-        0,
-        {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, 0, 0,
-         VK_SHADER_STAGE_COMPUTE_BIT, vk->compute_shader[k], "main", 0},
-        vk->pipeline_layout[k],
-        0,
-        0};
+        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT,
+        .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                  .pNext = NULL,
+                  .flags = 0,
+                  .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+                  .module = vk->compute_shader[k],
+                  .pName = "main",
+                  .pSpecializationInfo = NULL},
+        .layout = vk->pipeline_layout[k],
+        .basePipelineHandle = VK_NULL_HANDLE,
+        .basePipelineIndex = -1};
 
-    vk_res = vkCreateComputePipelines(
-        vk->device, 0, 1, &compute_pipeline_create_info, 0, &vk->pipeline[k]);
+    log_info("About to create pipilene: %u", k);
+    vk_res = vkCreateComputePipelines(vk->device, VK_NULL_HANDLE, 1,
+                                      &compute_pipeline_create_info, NULL,
+                                      &vk->pipeline[k]);
     if (vk_res != VK_SUCCESS) {
       log_error("Error when calling vkCreateComputePipelines for shader #%lu",
                 k);
