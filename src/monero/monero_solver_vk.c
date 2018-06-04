@@ -154,6 +154,7 @@ int monero_solver_vk_process(struct monero_solver *ptr, uint32_t nonce_from)
   }
 
   //  log_info("Waiting for queue");
+
   vk_res = vkQueueWaitIdle(vk->queue);
   if (vk_res != VK_SUCCESS) {
     log_error("Error when calling vkQueueWaitIdle");
@@ -205,7 +206,7 @@ monero_solver_new_vk(const struct monero_config_solver_vk *cfg)
   log_info("Dumping shader: %p: %lu", cryptonight_memloop_shader,
            cryptonight_memloop_shader_size);
   FILE *f = fopen("/home/fedor/src/dorenom/src/crypto/binary.spv", "w");
-  fwrite((void *)cryptonight_keccak_shader, 1, cryptonight_keccak_shader_size,
+  fwrite((void *)cryptonight_memloop_shader, 1, cryptonight_memloop_shader_size,
          f);
   fclose(f);
   log_info("Wrote %lu, bytes", cryptonight_memloop_shader_size);
@@ -262,6 +263,21 @@ monero_solver_new_vk(const struct monero_config_solver_vk *cfg)
   }
 }
 
+#ifndef NDEBUG
+
+VkBool32 vk_debug_report_callback_ext(VkDebugReportFlagsEXT flags,
+                                      VkDebugReportObjectTypeEXT objectType,
+                                      uint64_t object, size_t location,
+                                      int32_t messageCode,
+                                      const char *pLayerPrefix,
+                                      const char *pMessage, void *pUserData)
+{
+  log_warn(pMessage);
+  return VK_FALSE;
+}
+
+#endif
+
 struct monero_solver_vk_context *
 monero_solver_vk_context_init(uint32_t device_idx)
 {
@@ -315,6 +331,33 @@ monero_solver_vk_context_init(uint32_t device_idx)
     log_error("Error when calling vkCreateInstance: %d", (int)vk_res);
     goto ERROR;
   }
+
+#ifndef NDEBUG
+  log_info("Setting up debug callback");
+
+  PFN_vkCreateDebugReportCallbackEXT create_debug_report_callback =
+      (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(
+          ctx->instance, "vkCreateDebugReportCallbackEXT");
+
+  VkDebugReportCallbackCreateInfoEXT debug_report_callback_info = {
+      .sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT,
+      .pNext = NULL,
+      .flags = VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
+               VK_DEBUG_REPORT_WARNING_BIT_EXT |
+               VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
+               VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_DEBUG_BIT_EXT,
+      .pfnCallback = vk_debug_report_callback_ext,
+      .pUserData = NULL};
+  VkDebugReportCallbackEXT cbh;
+  vk_res = create_debug_report_callback(
+      ctx->instance, &debug_report_callback_info, NULL, &cbh);
+  if (vk_res != VK_SUCCESS) {
+    log_error("Error when calling vkCreateDebugReportCallbackEXT: %d", (int)vk_res);
+    goto ERROR;
+  }
+
+
+#endif
 
   // get number of physical devices in the system
   uint32_t physical_device_count = 0;
@@ -723,7 +766,11 @@ bool monero_solver_vk_context_prepare_pipelines(
     VkComputePipelineCreateInfo compute_pipeline_create_info = {
         .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
         .pNext = NULL,
+#ifndef NDEBUG
         .flags = VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT,
+#else
+        .flags = 0,
+#endif
         .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                   .pNext = NULL,
                   .flags = 0,
@@ -859,31 +906,20 @@ bool monero_solver_vk_context_prepare_command_buffer(
 
   vkCmdDispatch(vk->cmd_buffer, parallelism, 1, 1);
 
-  VkBufferMemoryBarrier state_buffer_barrier = {
-      VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-      NULL,
-      VK_ACCESS_SHADER_WRITE_BIT,
-      VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
-      VK_QUEUE_FAMILY_IGNORED,
-      VK_QUEUE_FAMILY_IGNORED,
-      vk->buffer[STATE_BUFFER],
-      0,
-      VK_WHOLE_SIZE};
-
-  VkBufferMemoryBarrier scratchpad_buffer_barrier = {
-      VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-      NULL,
-      VK_ACCESS_SHADER_WRITE_BIT,
-      VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
-      VK_QUEUE_FAMILY_IGNORED,
-      VK_QUEUE_FAMILY_IGNORED,
-      vk->buffer[SCRATCHPAD_BUFFER],
-      0,
-      VK_WHOLE_SIZE};
+  VkBufferMemoryBarrier state_buffer_init_barrier = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+      .pNext = NULL,
+      .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+      .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .buffer = vk->buffer[STATE_BUFFER],
+      .offset = 0,
+      .size = VK_WHOLE_SIZE};
 
   vkCmdPipelineBarrier(vk->cmd_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL, 1,
-                       &state_buffer_barrier, 0, NULL);
+                       &state_buffer_init_barrier, 0, NULL);
 
   vkCmdBindPipeline(vk->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
                     vk->pipeline[PIPELINE_KECCAK]);
@@ -894,9 +930,20 @@ bool monero_solver_vk_context_prepare_command_buffer(
 
   vkCmdDispatch(vk->cmd_buffer, parallelism, 1, 1);
 
+  VkBufferMemoryBarrier state_buffer_keccak_barrier = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+      .pNext = NULL,
+      .srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+      .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .buffer = vk->buffer[STATE_BUFFER],
+      .offset = 0,
+      .size = VK_WHOLE_SIZE};
+
   vkCmdPipelineBarrier(vk->cmd_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL, 1,
-                       &state_buffer_barrier, 0, NULL);
+                       &state_buffer_keccak_barrier, 0, NULL);
 
   vkCmdBindPipeline(vk->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
                     vk->pipeline[PIPELINE_EXPLODE]);
@@ -907,9 +954,20 @@ bool monero_solver_vk_context_prepare_command_buffer(
 
   vkCmdDispatch(vk->cmd_buffer, parallelism, 1, 1);
 
+  VkBufferMemoryBarrier scratchpad_buffer_explode_barrier = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+      .pNext = NULL,
+      .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+      .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .buffer = vk->buffer[SCRATCHPAD_BUFFER],
+      .offset = 0,
+      .size = VK_WHOLE_SIZE};
+
   vkCmdPipelineBarrier(vk->cmd_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL, 1,
-                       &scratchpad_buffer_barrier, 0, NULL);
+                       &scratchpad_buffer_explode_barrier, 0, NULL);
 
   vkCmdBindPipeline(vk->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
                     vk->pipeline[PIPELINE_MEMLOOP]);
@@ -920,9 +978,25 @@ bool monero_solver_vk_context_prepare_command_buffer(
 
   vkCmdDispatch(vk->cmd_buffer, parallelism, 1, 1);
 
+  VkBufferMemoryBarrier scratchpad_buffer_memloop_barrier = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+      .pNext = NULL,
+      .srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+      .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .buffer = vk->buffer[SCRATCHPAD_BUFFER],
+      .offset = 0,
+      .size = VK_WHOLE_SIZE};
+
+
   vkCmdPipelineBarrier(vk->cmd_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                       VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL, 1,
-                       &scratchpad_buffer_barrier, 0, NULL);
+                       VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+//                       VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                       0,
+                       0, NULL,
+                       1, &scratchpad_buffer_memloop_barrier,
+                       0, NULL);
 
   vk_res = vkEndCommandBuffer(vk->cmd_buffer);
 

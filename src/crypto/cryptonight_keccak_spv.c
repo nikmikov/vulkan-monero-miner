@@ -264,11 +264,10 @@ const uint32_t cryptonight_keccak_shader[] = {
   (2 << 16) | OP_LABEL, LABEL_ROTL64,
   (5 << 16) | OP_ISUB, TYPE_UINT, ROTL64_OFFSET, CONST_UINT_64, ROTL64_NUM_BITS,
   // FIXME: LLVM optimises it to intrinsic: llvm.nvvm.rotate.b64
-  //        anv NVidia spirv compiler fails with unhandled intrinsic error
-  //        3 lines of code below can be uncommented once it's fixed
-    (5 << 16) | OP_SHIFT_LEFT_LOGICAL, TYPE_ULONG, ROTL64_SL, ROTL64_ARG, ROTL64_NUM_BITS,
-    (5 << 16) | OP_SHIFT_RIGHT_LOGICAL, TYPE_ULONG, ROTL64_SR, ROTL64_ARG, ROTL64_OFFSET,
-    (5 << 16) | OP_BITWISE_OR, TYPE_ULONG, ROTL64_RESULT, ROTL64_SL, ROTL64_SR,
+  //        anv NVidia spirv next gen compiler fails with unhandled intrinsic error
+  (5 << 16) | OP_SHIFT_LEFT_LOGICAL, TYPE_ULONG, ROTL64_SL, ROTL64_ARG, ROTL64_NUM_BITS,
+  (5 << 16) | OP_SHIFT_RIGHT_LOGICAL, TYPE_ULONG, ROTL64_SR, ROTL64_ARG, ROTL64_OFFSET,
+  (5 << 16) | OP_BITWISE_OR, TYPE_ULONG, ROTL64_RESULT, ROTL64_SL, ROTL64_SR,
 //  (5 << 16) | OP_SHIFT_RIGHT_LOGICAL, TYPE_ULONG, ROTL64_SR, ROTL64_ARG, ROTL64_OFFSET,
 //  (7 << 16) | OP_BITFIELD_INSERT, TYPE_ULONG, ROTL64_RESULT, ROTL64_SR, ROTL64_ARG, ROTL64_NUM_BITS, ROTL64_OFFSET,
   (2 << 16) | OP_RETURN_VALUE, ROTL64_RESULT,
