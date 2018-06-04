@@ -7,11 +7,14 @@
 #include <string.h>
 #include <vulkan/vulkan.h>
 
-#include "crypto/cryptonight_spv.h"
 #include "crypto/cryptonight/cryptonight.h"
+#include "crypto/cryptonight_spv.h"
 #include "logging.h"
+#include "utils/unused.h"
 
 #define CRYPTONIGHT_STATE_SIZE 200
+
+#define VK_FLAGS_NONE 0
 
 enum BUFFERS { INPUT_BUFFER = 0, STATE_BUFFER, SCRATCHPAD_BUFFER, NUM_BUFFERS };
 
@@ -47,6 +50,9 @@ struct monero_solver_vk_context {
   VkDescriptorSet descriptor_set[NUM_COMPUTE_PIPELINES];
   VkPipelineLayout pipeline_layout[NUM_COMPUTE_PIPELINES];
   VkPipeline pipeline[NUM_COMPUTE_PIPELINES];
+
+  // fence
+  VkFence fence;
 };
 
 struct monero_solver_vk {
@@ -144,20 +150,31 @@ int monero_solver_vk_process(struct monero_solver *ptr, uint32_t nonce_from)
 
   *(uint32_t *)vk->input_mmapped = nonce_from;
 
-  VkSubmitInfo submit_info = {
-      VK_STRUCTURE_TYPE_SUBMIT_INFO, NULL, 0, 0, 0, 1, &vk->cmd_buffer, 0, 0};
+  VkSubmitInfo submit_info = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                              .pNext = NULL,
+                              .waitSemaphoreCount = 0,
+                              .pWaitSemaphores = NULL,
+                              .pWaitDstStageMask = NULL,
+                              .commandBufferCount = 1,
+                              .pCommandBuffers = &vk->cmd_buffer,
+                              .signalSemaphoreCount = 0,
+                              .pSignalSemaphores = NULL};
 
-  VkResult vk_res = vkQueueSubmit(vk->queue, 1, &submit_info, 0);
+  VkResult vk_res = vkQueueSubmit(vk->queue, 1, &submit_info, vk->fence);
   if (vk_res != VK_SUCCESS) {
     log_error("Error when calling vkQueueSubmit");
     return -1;
   }
 
-  //  log_info("Waiting for queue");
-
-  vk_res = vkQueueWaitIdle(vk->queue);
+  vk_res = vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE, UINT64_MAX);
   if (vk_res != VK_SUCCESS) {
-    log_error("Error when calling vkQueueWaitIdle");
+    log_error("Error when calling vkWaitForFences");
+    return -1;
+  }
+
+  vk_res = vkResetFences(vk->device, 1, &vk->fence);
+  if (vk_res != VK_SUCCESS) {
+    log_error("Error when calling vkResetFences");
     return -1;
   }
 
@@ -172,18 +189,16 @@ int monero_solver_vk_process(struct monero_solver *ptr, uint32_t nonce_from)
   for (size_t k = 0; k < solver->parallelism; ++k) {
 
     *(uint32_t *)&solver->input_hash[MONERO_NONCE_POSITION] = nonce_from + k;
-//    keccak_256(keccak_state, CRYPTONIGHT_STATE_SIZE, solver->input_hash,
-//               solver->input_hash_len);
+    //    keccak_256(keccak_state, CRYPTONIGHT_STATE_SIZE, solver->input_hash,
+    //               solver->input_hash_len);
 
-    cryptonight_aesni(solver->input_hash, solver->input_hash_len,
-                      &output_cpu, cryptonight_ctx);
-
+    cryptonight_aesni(solver->input_hash, solver->input_hash_len, &output_cpu,
+                      cryptonight_ctx);
 
     print_debug("FINAL HASH CPU: ", &output_cpu, 200);
 
-
     uint8_t *output =
-      (uint8_t *)vk->scratchpad_mmapped + k * MONERO_CRYPTONIGHT_MEMORY;
+        (uint8_t *)vk->scratchpad_mmapped + k * MONERO_CRYPTONIGHT_MEMORY;
     print_debug("FINAL HASH VK:: ", output, 200);
 
     if (memcmp(output, &output_cpu, 200) != 0) {
@@ -265,14 +280,32 @@ monero_solver_new_vk(const struct monero_config_solver_vk *cfg)
 
 #ifndef NDEBUG
 
+// this will be called from vulkan debug layers
 VkBool32 vk_debug_report_callback_ext(VkDebugReportFlagsEXT flags,
-                                      VkDebugReportObjectTypeEXT objectType,
+                                      VkDebugReportObjectTypeEXT object_type,
                                       uint64_t object, size_t location,
-                                      int32_t messageCode,
-                                      const char *pLayerPrefix,
-                                      const char *pMessage, void *pUserData)
+                                      int32_t message_code,
+                                      const char *layer_prefix,
+                                      const char *message, void *user_ptr)
 {
-  log_warn(pMessage);
+  UNUSED(object_type);
+  UNUSED(location);
+  UNUSED(object);
+  UNUSED(message_code);
+  UNUSED(layer_prefix);
+  UNUSED(user_ptr);
+  if (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
+    log_error("VULKAN: %s", message);
+  } else if (flags & VK_DEBUG_REPORT_WARNING_BIT_EXT) {
+    log_warn("VULKAN: %s", message);
+  } else if (flags & VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT) {
+    log_warn("PERFORMANCE VULKAN: %s", message);
+  } else if (flags & VK_DEBUG_REPORT_INFORMATION_BIT_EXT) {
+    log_info("VULKAN: %s", message);
+  } else {
+    log_debug("VULKAN: %s", message);
+  }
+
   return VK_FALSE;
 }
 
@@ -285,14 +318,10 @@ monero_solver_vk_context_init(uint32_t device_idx)
       calloc(1, sizeof(struct monero_solver_vk_context));
 
 #ifndef NDEBUG
-  const char *enabled_layers[] = {
-    "VK_LAYER_LUNARG_standard_validation"
-  };
+  const char *enabled_layers[] = {"VK_LAYER_LUNARG_standard_validation"};
   uint32_t enabled_layers_count = sizeof(enabled_layers) / sizeof(const char *);
 
-  const char *enabled_extensions[] = {
-    VK_EXT_DEBUG_REPORT_EXTENSION_NAME
-  };
+  const char *enabled_extensions[] = {VK_EXT_DEBUG_REPORT_EXTENSION_NAME};
   const uint32_t enabled_extensions_count =
       sizeof(enabled_extensions) / sizeof(char *);
 
@@ -303,20 +332,16 @@ monero_solver_vk_context_init(uint32_t device_idx)
   const uint32_t enabled_extensions_count = 0;
 #endif
 
-  log_info("Extensions: %u, layers: %u", enabled_extensions_count, enabled_layers_count);
+  log_info("Extensions: %u, layers: %u", enabled_extensions_count,
+           enabled_layers_count);
   const VkApplicationInfo application_info = {
-      VK_STRUCTURE_TYPE_APPLICATION_INFO,
-      0,
-      "MorBirMoneroSolver",
-      0,
-      "",
-      0,
+      VK_STRUCTURE_TYPE_APPLICATION_INFO, 0, "MorBirMoneroSolver", 0, "", 0,
       VK_MAKE_VERSION(1, 1, 76)};
 
   const VkInstanceCreateInfo instance_create_info = {
       .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
       .pNext = NULL,
-      .flags = 0,
+      .flags = VK_FLAGS_NONE,
       .pApplicationInfo = &application_info,
       .enabledLayerCount = enabled_layers_count,
       .ppEnabledLayerNames = enabled_layers,
@@ -352,10 +377,10 @@ monero_solver_vk_context_init(uint32_t device_idx)
   vk_res = create_debug_report_callback(
       ctx->instance, &debug_report_callback_info, NULL, &cbh);
   if (vk_res != VK_SUCCESS) {
-    log_error("Error when calling vkCreateDebugReportCallbackEXT: %d", (int)vk_res);
+    log_error("Error when calling vkCreateDebugReportCallbackEXT: %d",
+              (int)vk_res);
     goto ERROR;
   }
-
 
 #endif
 
@@ -428,15 +453,14 @@ monero_solver_vk_context_init(uint32_t device_idx)
 
   // Create logical device
   VkDeviceCreateInfo device_create_info = {
-    .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-    .pNext = NULL,
-    .flags = 0,
-    .queueCreateInfoCount = 1,
-    .pQueueCreateInfos = &queue_create_info,
-    .enabledExtensionCount = 0,
-    .ppEnabledExtensionNames = NULL,
-    .pEnabledFeatures = &enabled_device_features
-  };
+      .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+      .pNext = NULL,
+      .flags = VK_FLAGS_NONE,
+      .queueCreateInfoCount = 1,
+      .pQueueCreateInfos = &queue_create_info,
+      .enabledExtensionCount = 0,
+      .ppEnabledExtensionNames = NULL,
+      .pEnabledFeatures = &enabled_device_features};
 
   vk_res = vkCreateDevice(ctx->physical_device, &device_create_info, NULL,
                           &ctx->device);
@@ -449,10 +473,11 @@ monero_solver_vk_context_init(uint32_t device_idx)
   vkGetDeviceQueue(ctx->device, queue_family_index, 0, &ctx->queue);
 
   // Compute command pool
-  VkCommandPoolCreateInfo cmd_pool_info = {0};
-  cmd_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-  cmd_pool_info.queueFamilyIndex = queue_family_index;
-  cmd_pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+  VkCommandPoolCreateInfo cmd_pool_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .pNext = NULL,
+      .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+      .queueFamilyIndex = queue_family_index};
   vk_res =
       vkCreateCommandPool(ctx->device, &cmd_pool_info, NULL, &ctx->cmd_pool);
   if (vk_res != VK_SUCCESS) {
@@ -506,6 +531,9 @@ void monero_solver_vk_context_release(struct monero_solver_vk_context *ctx)
       vkUnmapMemory(ctx->device, ctx->memory[i]);
       vkFreeMemory(ctx->device, ctx->memory[i], NULL);
     }
+  }
+  if (ctx->fence != VK_NULL_HANDLE) {
+    vkDestroyFence(ctx->device, ctx->fence, NULL);
   }
   if (ctx->cmd_pool != VK_NULL_HANDLE) {
     vkDestroyCommandPool(ctx->device, ctx->cmd_pool, NULL);
@@ -639,8 +667,8 @@ bool monero_solver_vk_context_prepare_buffers(
   }
 
   // TODO: remove temporary debug
-  vk_res = vkMapMemory(vk->device, vk->memory[SCRATCHPAD_BUFFER], 0, VK_WHOLE_SIZE,
-                       0, &vk->scratchpad_mmapped);
+  vk_res = vkMapMemory(vk->device, vk->memory[SCRATCHPAD_BUFFER], 0,
+                       VK_WHOLE_SIZE, 0, &vk->scratchpad_mmapped);
 
   if (vk_res != VK_SUCCESS) {
     log_error("Error when calling vkMapMemory for scratchpad buffer: %d",
@@ -749,7 +777,7 @@ bool monero_solver_vk_context_prepare_pipelines(
     VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .pNext = NULL,
-        .flags = 0,
+        .flags = VK_FLAGS_NONE,
         .setLayoutCount = 1,
         .pSetLayouts = &vk->descriptor_set_layout[k],
         .pushConstantRangeCount = 0,
@@ -769,7 +797,7 @@ bool monero_solver_vk_context_prepare_pipelines(
 #ifndef NDEBUG
         .flags = VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT,
 #else
-        .flags = 0,
+        .flags = VK_FLAGS_NONE,
 #endif
         .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                   .pNext = NULL,
@@ -793,6 +821,19 @@ bool monero_solver_vk_context_prepare_pipelines(
     }
   }
 
+  // create fence
+  VkFenceCreateInfo fence_create_info = {
+      .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+      .pNext = NULL,
+      .flags = VK_FLAGS_NONE};
+
+  vk_res = vkCreateFence(vk->device, &fence_create_info, NULL, &vk->fence);
+
+  if (vk_res != VK_SUCCESS) {
+    log_error("Error when calling vkCreateFence");
+    return false;
+  }
+
   return true;
 }
 
@@ -808,12 +849,12 @@ bool monero_solver_vk_context_prepare_command_buffer(
       {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2}};
 
   VkDescriptorPoolCreateInfo descriptor_pool_create_info = {
-      VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-      NULL,
-      0,
-      NUM_COMPUTE_PIPELINES,
-      NUM_COMPUTE_PIPELINES,
-      descriptor_pool_size};
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+      .pNext = NULL,
+      .flags = VK_FLAGS_NONE,
+      .maxSets = NUM_COMPUTE_PIPELINES,
+      .poolSizeCount = NUM_COMPUTE_PIPELINES,
+      .pPoolSizes = descriptor_pool_size};
 
   vk_res = vkCreateDescriptorPool(vk->device, &descriptor_pool_create_info, 0,
                                   &vk->descriptor_pool);
@@ -989,14 +1030,11 @@ bool monero_solver_vk_context_prepare_command_buffer(
       .offset = 0,
       .size = VK_WHOLE_SIZE};
 
-
-  vkCmdPipelineBarrier(vk->cmd_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                       VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-//                       VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                       0,
-                       0, NULL,
-                       1, &scratchpad_buffer_memloop_barrier,
-                       0, NULL);
+  vkCmdPipelineBarrier(
+      vk->cmd_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+      //                       VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+      0, 0, NULL, 1, &scratchpad_buffer_memloop_barrier, 0, NULL);
 
   vk_res = vkEndCommandBuffer(vk->cmd_buffer);
 
