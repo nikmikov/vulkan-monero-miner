@@ -42,7 +42,6 @@ struct monero_solver_vk_context {
   VkBuffer buffer[NUM_BUFFERS];
   void *input_mmapped;
   void *output_mmapped;
-  void *scratchpad_mmapped;
 
   // shaders
   VkCommandBuffer cmd_buffer;
@@ -199,7 +198,7 @@ int monero_solver_vk_process(struct monero_solver *ptr, uint32_t nonce_from)
     print_debug("FINAL HASH CPU: ", &output_cpu, 200);
 
     uint8_t *output =
-        (uint8_t *)vk->scratchpad_mmapped + k * MONERO_CRYPTONIGHT_MEMORY;
+      (uint8_t *)vk->output_mmapped + k * 200; //MONERO_CRYPTONIGHT_MEMORY;
     print_debug("FINAL HASH VK:: ", output, 200);
 
     if (memcmp(output, &output_cpu, 200) != 0) {
@@ -222,7 +221,7 @@ monero_solver_new_vk(const struct monero_config_solver_vk *cfg)
   log_info("Dumping shader: %p: %lu", cryptonight_implode_shader,
            cryptonight_implode_shader_size);
   FILE *f = fopen("/home/fedor/src/dorenom/src/crypto/binary.spv", "w");
-  fwrite((void *)cryptonight_explode_shader, 1, cryptonight_explode_shader_size,
+  fwrite((void *)cryptonight_implode_shader, 1, cryptonight_implode_shader_size,
          f);
   fclose(f);
   log_info("Wrote %lu, bytes", cryptonight_memloop_shader_size);
@@ -591,9 +590,7 @@ bool monero_solver_vk_context_prepare_buffers(
           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT};
-  //      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT};
+      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT};
 
   const VkBufferCreateInfo buffer_create_info[3] = {
       {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, 0, 0, buffer_size[0],
@@ -663,16 +660,6 @@ bool monero_solver_vk_context_prepare_buffers(
 
   if (vk_res != VK_SUCCESS) {
     log_error("Error when calling vkMapMemory for output buffer: %d",
-              (int)vk_res);
-    return false;
-  }
-
-  // TODO: remove temporary debug
-  vk_res = vkMapMemory(vk->device, vk->memory[SCRATCHPAD_BUFFER], 0,
-                       VK_WHOLE_SIZE, 0, &vk->scratchpad_mmapped);
-
-  if (vk_res != VK_SUCCESS) {
-    log_error("Error when calling vkMapMemory for scratchpad buffer: %d",
               (int)vk_res);
     return false;
   }
