@@ -222,7 +222,7 @@ monero_solver_new_vk(const struct monero_config_solver_vk *cfg)
   log_info("Dumping shader: %p: %lu", cryptonight_implode_shader,
            cryptonight_implode_shader_size);
   FILE *f = fopen("/home/fedor/src/dorenom/src/crypto/binary.spv", "w");
-  fwrite((void *)cryptonight_implode_shader, 1, cryptonight_implode_shader_size,
+  fwrite((void *)cryptonight_explode_shader, 1, cryptonight_explode_shader_size,
          f);
   fclose(f);
   log_info("Wrote %lu, bytes", cryptonight_memloop_shader_size);

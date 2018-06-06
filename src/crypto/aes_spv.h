@@ -377,4 +377,151 @@
   (1 << 16) | OP_FUNCTION_END
 
 
+#define aes_expand_key_10_sbox_get_byte_enum(o) \
+  AES_EXPAND_KEY_10__SBOX_GETBYTE_X_##o,        \
+  AES_EXPAND_KEY_10__PTR_SBOX_GETBYTE_Y_##o,    \
+  AES_EXPAND_KEY_10__SBOX_GETBYTE_Y_##o,        \
+  AES_EXPAND_KEY_10__SBOX_GETBYTE_Y_BYTE0_##o,  \
+  AES_EXPAND_KEY_10__SBOX_GETBYTE_##o
+
+#define aes_expand_key_10_enum                  \
+  AES_EXPAND_KEY_10__LABEL,                     \
+  AES_EXPAND_KEY_10__IDX00,                     \
+  AES_EXPAND_KEY_10__IDX0,                      \
+  AES_EXPAND_KEY_10__LABEL_LOOP,                \
+  AES_EXPAND_KEY_10__I,                         \
+  AES_EXPAND_KEY_10__I_INC,                     \
+  AES_EXPAND_KEY_10__LOOP_COND,                 \
+  AES_EXPAND_KEY_10__LABEL_LOOP_BODY,           \
+  AES_EXPAND_KEY_10__LABEL_LOOP_END,            \
+  AES_EXPAND_KEY_10__I_DEC,                     \
+  AES_EXPAND_KEY_10__PTR_AES_KEY_I_SUB_1,       \
+  AES_EXPAND_KEY_10__AES_KEY_I_SUB_1,           \
+  aes_expand_key_10_sbox_get_byte_enum(0),      \
+  aes_expand_key_10_sbox_get_byte_enum(8),      \
+  aes_expand_key_10_sbox_get_byte_enum(16),     \
+  aes_expand_key_10_sbox_get_byte_enum(24),     \
+  AES_EXPAND_KEY_10__SW_0_8,                    \
+  AES_EXPAND_KEY_10__SW_0_8_16,                 \
+  AES_EXPAND_KEY_10__AES_KEY_I_SUB_1_SW,        \
+  AES_EXPAND_KEY_10__I_AND_3,                   \
+  AES_EXPAND_KEY_10__I_AND_3_NEQ_0,             \
+  AES_EXPAND_KEY_10__T,                         \
+  AES_EXPAND_KEY_10__I_SR_3,                    \
+  AES_EXPAND_KEY_10__I_SR_3_SUB_1,              \
+  AES_EXPAND_KEY_10__AES_KEY_RC,                \
+  AES_EXPAND_KEY_10__T_SL24,                    \
+  AES_EXPAND_KEY_10__T_SR8,                     \
+  AES_EXPAND_KEY_10__T_ROTL_24,                 \
+  AES_EXPAND_KEY_10__S,                         \
+  AES_EXPAND_KEY_10__I_AND_7,                   \
+  AES_EXPAND_KEY_10__I_AND_7_NEQ_0,             \
+  AES_EXPAND_KEY_10__Z,                         \
+  AES_EXPAND_KEY_10__I_SUB_8,                   \
+  AES_EXPAND_KEY_10__PTR_AES_KEY_I_SUB_8,       \
+  AES_EXPAND_KEY_10__AES_KEY_I_SUB_8,           \
+  AES_EXPAND_KEY_10__PTR_AES_KEY_I,             \
+  AES_EXPAND_KEY_10__AES_KEY_I
+
+#define aes_expand_key_10_sbox_get_byte(arg,o)                                                 \
+  (6 << 16) | OP_BITFIELD_UEXTRACT, TYPE_UINT, AES_EXPAND_KEY_10__SBOX_GETBYTE_X_##o, arg,     \
+              CONST_UINT_##o, CONST_UINT_8,                                                    \
+  (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_WG_UINT, AES_EXPAND_KEY_10__PTR_SBOX_GETBYTE_Y_##o,    \
+              AES_2, AES_EXPAND_KEY_10__SBOX_GETBYTE_X_##o,                                    \
+  (4 << 16) | OP_LOAD, TYPE_UINT, AES_EXPAND_KEY_10__SBOX_GETBYTE_Y_##o,                       \
+              AES_EXPAND_KEY_10__PTR_SBOX_GETBYTE_Y_##o,                                       \
+  (5 << 16) | OP_BITWISE_AND, TYPE_UINT, AES_EXPAND_KEY_10__SBOX_GETBYTE_Y_BYTE0_##o,          \
+              AES_EXPAND_KEY_10__SBOX_GETBYTE_Y_##o, CONST_UINT_0xFF,                          \
+  (5 << 16) | OP_SHIFT_LEFT_LOGICAL, TYPE_UINT, AES_EXPAND_KEY_10__SBOX_GETBYTE_##o,           \
+              AES_EXPAND_KEY_10__SBOX_GETBYTE_Y_BYTE0_##o, CONST_UINT_##o
+
+
+// expand AES-256 key to 10 round keys
+// AES_KEY should be in scope: shared uint[40]
+// with first 8 bytes interpreted as AES-256 key
+#define aes_expand_key_10\
+  (2 << 16) | OP_LABEL, AES_EXPAND_KEY_10__LABEL,                                              \
+  /* Make sure that only 1 local thread with id=0 will do the work */                          \
+  (5 << 16) | OP_SHIFT_LEFT_LOGICAL, TYPE_UINT, AES_EXPAND_KEY_10__IDX00,                      \
+              LOCAL_INVOCATION_X, CONST_UINT_8,                                                \
+  (5 << 16) | OP_IADD, TYPE_UINT, AES_EXPAND_KEY_10__IDX0,                                     \
+              AES_EXPAND_KEY_10__IDX00, CONST_UINT_8,                                          \
+  /*  for (i = 8; i < 40; ++i) */                                                              \
+  (2 << 16) | OP_BRANCH, AES_EXPAND_KEY_10__LABEL_LOOP,                                        \
+  (2 << 16) | OP_LABEL, AES_EXPAND_KEY_10__LABEL_LOOP,                                         \
+  (7 << 16) | OP_PHI, TYPE_UINT, AES_EXPAND_KEY_10__I,                                         \
+              AES_EXPAND_KEY_10__IDX0, AES_EXPAND_KEY_10__LABEL,                               \
+              AES_EXPAND_KEY_10__I_INC, AES_EXPAND_KEY_10__LABEL_LOOP_BODY,                    \
+  (5 << 16) | OP_ULESS_THAN, TYPE_BOOL, AES_EXPAND_KEY_10__LOOP_COND,                          \
+              AES_EXPAND_KEY_10__I, CONST_UINT_40, /* i < 40 ? */                              \
+  (4 << 16) | OP_LOOP_MERGE, AES_EXPAND_KEY_10__LABEL_LOOP_END,                                \
+              AES_EXPAND_KEY_10__LABEL_LOOP_BODY, LC_UNROLL,                                   \
+  (4 << 16) | OP_BRANCH_CONDITIONAL, AES_EXPAND_KEY_10__LOOP_COND,                             \
+              AES_EXPAND_KEY_10__LABEL_LOOP_BODY, AES_EXPAND_KEY_10__LABEL_LOOP_END,           \
+  (2 << 16) | OP_LABEL, AES_EXPAND_KEY_10__LABEL_LOOP_BODY,                                    \
+  /* key[i - 1] */                                                                             \
+  (5 << 16) | OP_ISUB, TYPE_UINT, AES_EXPAND_KEY_10__I_DEC, AES_EXPAND_KEY_10__I, CONST_UINT_1,\
+  (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_WG_UINT, AES_EXPAND_KEY_10__PTR_AES_KEY_I_SUB_1,       \
+              AES_KEY, AES_EXPAND_KEY_10__I_DEC,                                               \
+  (4 << 16) | OP_LOAD, TYPE_UINT, AES_EXPAND_KEY_10__AES_KEY_I_SUB_1,                          \
+              AES_EXPAND_KEY_10__PTR_AES_KEY_I_SUB_1,                                          \
+  /* sub_word(key[i - 1]) */                                                                   \
+  aes_expand_key_10_sbox_get_byte(AES_EXPAND_KEY_10__AES_KEY_I_SUB_1,0),                       \
+  aes_expand_key_10_sbox_get_byte(AES_EXPAND_KEY_10__AES_KEY_I_SUB_1,8),                       \
+  aes_expand_key_10_sbox_get_byte(AES_EXPAND_KEY_10__AES_KEY_I_SUB_1,16),                      \
+  aes_expand_key_10_sbox_get_byte(AES_EXPAND_KEY_10__AES_KEY_I_SUB_1,24),                      \
+  (5 << 16) | OP_BITWISE_OR, TYPE_UINT, AES_EXPAND_KEY_10__SW_0_8,                             \
+              AES_EXPAND_KEY_10__SBOX_GETBYTE_0, AES_EXPAND_KEY_10__SBOX_GETBYTE_8,            \
+  (5 << 16) | OP_BITWISE_OR, TYPE_UINT, AES_EXPAND_KEY_10__SW_0_8_16,                          \
+              AES_EXPAND_KEY_10__SW_0_8, AES_EXPAND_KEY_10__SBOX_GETBYTE_16,                   \
+  (5 << 16) | OP_BITWISE_OR, TYPE_UINT, AES_EXPAND_KEY_10__AES_KEY_I_SUB_1_SW,                 \
+              AES_EXPAND_KEY_10__SW_0_8_16, AES_EXPAND_KEY_10__SBOX_GETBYTE_24,                \
+  /*  t = i & 3 ? key[i - 1] : sub_word(key[i - 1]) */                                         \
+  (5 << 16) | OP_BITWISE_AND, TYPE_UINT, AES_EXPAND_KEY_10__I_AND_3,                           \
+              AES_EXPAND_KEY_10__I, CONST_UINT_3,                                              \
+  (5 << 16) | OP_INOTEQUAL, TYPE_BOOL, AES_EXPAND_KEY_10__I_AND_3_NEQ_0,                       \
+              AES_EXPAND_KEY_10__I_AND_3, CONST_UINT_0,                                        \
+  (6 << 16) | OP_SELECT, TYPE_UINT, AES_EXPAND_KEY_10__T, AES_EXPAND_KEY_10__I_AND_3_NEQ_0,    \
+              AES_EXPAND_KEY_10__AES_KEY_I_SUB_1, AES_EXPAND_KEY_10__AES_KEY_I_SUB_1_SW,       \
+  /* rc = 1 << ((i >> 3) - 1) */                                                               \
+  (5 << 16) | OP_SHIFT_RIGHT_LOGICAL, TYPE_UINT, AES_EXPAND_KEY_10__I_SR_3,                    \
+              AES_EXPAND_KEY_10__I, CONST_UINT_3,                                              \
+  (5 << 16) | OP_ISUB, TYPE_UINT, AES_EXPAND_KEY_10__I_SR_3_SUB_1,                             \
+              AES_EXPAND_KEY_10__I_SR_3, CONST_UINT_1,                                         \
+  (5 << 16) | OP_SHIFT_LEFT_LOGICAL, TYPE_UINT, AES_EXPAND_KEY_10__AES_KEY_RC,                 \
+              CONST_UINT_1, AES_EXPAND_KEY_10__I_SR_3_SUB_1,                                   \
+  /* s = rotl(t, 24U) ^ rc */                                                                  \
+  (5 << 16) | OP_SHIFT_LEFT_LOGICAL, TYPE_UINT, AES_EXPAND_KEY_10__T_SL24,                     \
+              AES_EXPAND_KEY_10__T, CONST_UINT_24,                                             \
+  (5 << 16) | OP_SHIFT_RIGHT_LOGICAL, TYPE_UINT, AES_EXPAND_KEY_10__T_SR8,                     \
+              AES_EXPAND_KEY_10__T, CONST_UINT_8,                                              \
+  (5 << 16) | OP_BITWISE_OR, TYPE_UINT, AES_EXPAND_KEY_10__T_ROTL_24,                          \
+              AES_EXPAND_KEY_10__T_SL24, AES_EXPAND_KEY_10__T_SR8,                             \
+  (5 << 16) | OP_BITWISE_XOR, TYPE_UINT, AES_EXPAND_KEY_10__S,                                 \
+              AES_EXPAND_KEY_10__T_ROTL_24, AES_EXPAND_KEY_10__AES_KEY_RC,                     \
+  /* z = i & 7 ? t : s */                                                                      \
+  (5 << 16) | OP_BITWISE_AND, TYPE_UINT, AES_EXPAND_KEY_10__I_AND_7,                           \
+              AES_EXPAND_KEY_10__I, CONST_UINT_7,                                              \
+  (5 << 16) | OP_INOTEQUAL, TYPE_BOOL, AES_EXPAND_KEY_10__I_AND_7_NEQ_0,                       \
+              AES_EXPAND_KEY_10__I_AND_7, CONST_UINT_0,                                        \
+  (6 << 16) | OP_SELECT, TYPE_UINT, AES_EXPAND_KEY_10__Z, AES_EXPAND_KEY_10__I_AND_7_NEQ_0,    \
+              AES_EXPAND_KEY_10__T, AES_EXPAND_KEY_10__S,                                      \
+  /* k[i] = k[i - 8] ^ z;*/                                                                    \
+  (5 << 16) | OP_ISUB, TYPE_UINT, AES_EXPAND_KEY_10__I_SUB_8,                                  \
+              AES_EXPAND_KEY_10__I, CONST_UINT_8,                                              \
+  (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_WG_UINT, AES_EXPAND_KEY_10__PTR_AES_KEY_I_SUB_8,       \
+              AES_KEY, AES_EXPAND_KEY_10__I_SUB_8,                                             \
+  (4 << 16) | OP_LOAD, TYPE_UINT, AES_EXPAND_KEY_10__AES_KEY_I_SUB_8,                          \
+              AES_EXPAND_KEY_10__PTR_AES_KEY_I_SUB_8,                                          \
+  (5 << 16) | OP_BITWISE_XOR, TYPE_UINT, AES_EXPAND_KEY_10__AES_KEY_I,                         \
+              AES_EXPAND_KEY_10__AES_KEY_I_SUB_8, AES_EXPAND_KEY_10__Z,                        \
+  (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_WG_UINT, AES_EXPAND_KEY_10__PTR_AES_KEY_I,             \
+              AES_KEY, AES_EXPAND_KEY_10__I,                                                   \
+  (3 << 16) | OP_STORE, AES_EXPAND_KEY_10__PTR_AES_KEY_I, AES_EXPAND_KEY_10__AES_KEY_I,        \
+  /* END */                                                                                    \
+  (5 << 16) | OP_IADD, TYPE_UINT, AES_EXPAND_KEY_10__I_INC, AES_EXPAND_KEY_10__I, CONST_UINT_1,\
+  (2 << 16) | OP_BRANCH, AES_EXPAND_KEY_10__LABEL_LOOP,                                        \
+  (2 << 16) | OP_LABEL, AES_EXPAND_KEY_10__LABEL_LOOP_END
+
+
 // clang-format on
