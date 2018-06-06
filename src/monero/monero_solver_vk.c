@@ -1080,6 +1080,20 @@ bool monero_solver_vk_context_prepare_command_buffer(
 
   vkCmdDispatch(vk->cmd_buffer, parallelism, 1, 1);
 
+  vkCmdPipelineBarrier(vk->cmd_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                       VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL, 1,
+                       &state_buffer_keccak_barrier, 0, NULL);
+
+  vkCmdBindPipeline(vk->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                    vk->pipeline[PIPELINE_KECCAK]);
+
+  vkCmdBindDescriptorSets(vk->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                          vk->pipeline_layout[PIPELINE_KECCAK], 0, 1,
+                          &vk->descriptor_set[PIPELINE_KECCAK], 0, 0);
+
+  vkCmdDispatch(vk->cmd_buffer, parallelism, 1, 1);
+
+
   vk_res = vkEndCommandBuffer(vk->cmd_buffer);
 
   if (vk_res != VK_SUCCESS) {
