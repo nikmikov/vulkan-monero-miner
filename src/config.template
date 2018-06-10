@@ -11,6 +11,6 @@
       }
     ],
     "solvers": [
-       {"vk": {"affine_to_cpu": 1, "device": 1, "parallelism": 1}}
-    ]
+       {"vk": {"affine_to_cpu": 0, "device": 0, "parallelism": 2200}}
+]
 }]

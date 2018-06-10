@@ -105,46 +105,52 @@
 //  - types TYPE_BOOL, TYPE_UINT, TYPE_PTR_FN_UINT, TYPE_PTR_WG_UINT
 //  - local size must be set to [8,1,1]
 //  - declared variables: AES_0, AES_1, AES_2, AES_3 as type: [workgroup] uint[256]
-//  - built-in variables LOCAL_SIZE_X, LOCAL_INVOCATION_X should be in scope
+//  - built-in variables LOCAL_INVOCATION_INDEX, WORKGROUP_SIZE  should be in scope
 //  - constants: CONST_UINT_1, CONST_UINT_2, CONST_UINT_3, CONST_UINT_7, CONST_UINT_8,
 //               CONST_UINT_16, CONST_UINT_24, CONST_UINT_256, CONST_UINT_AES_WPOLY=0x11b
 //  - PTR_CONST_AES_SBOX0: pointer to const uint[64]
 
-#define aes_gen_tables_enum          \
-  AES_GEN_TABLES__ROTL_SL_1,         \
-  AES_GEN_TABLES__ROTL_SR_1,         \
-  AES_GEN_TABLES__C_1,               \
-  AES_GEN_TABLES__PTR_AES_1_I,       \
-  AES_GEN_TABLES__ROTL_SL_2,         \
-  AES_GEN_TABLES__ROTL_SR_2,         \
-  AES_GEN_TABLES__C_2,               \
-  AES_GEN_TABLES__PTR_AES_2_I,       \
-  AES_GEN_TABLES__ROTL_SL_3,         \
-  AES_GEN_TABLES__ROTL_SR_3,         \
-  AES_GEN_TABLES__C_3,               \
-  AES_GEN_TABLES__PTR_AES_3_I,       \
-  AES_GEN_TABLES__LABEL_BEGIN,       \
-  AES_GEN_TABLES__LABEL_LOOP,        \
-  AES_GEN_TABLES__I,                 \
-  AES_GEN_TABLES__I_INC,             \
-  AES_GEN_TABLES__LABEL_LOOP_COND,   \
-  AES_GEN_TABLES__LABEL_LOOP_BODY,   \
-  AES_GEN_TABLES__LABEL_LOOP_END,    \
-  AES_GEN_TABLES__SBOX0_PACKED_GIDX, \
-  AES_GEN_TABLES__PTR_SBOX0_I,       \
-  AES_GEN_TABLES__SBOX0_I,           \
-  AES_GEN_TABLES__SBOX0_PACKED_LIDX, \
-  AES_GEN_TABLES__SBOX0_PACKED_OFF,  \
-  AES_GEN_TABLES__X,                 \
-  AES_GEN_TABLES__X_SL_1,            \
-  AES_GEN_TABLES__X_BIT7,            \
-  AES_GEN_TABLES__X_MUL_WPOLY,       \
-  AES_GEN_TABLES__X_BIT7_SET,        \
-  AES_GEN_TABLES__X_A,               \
-  AES_GEN_TABLES__X_B,               \
-  AES_GEN_TABLES__C_8_16,            \
-  AES_GEN_TABLES__C_8_16_24,         \
-  AES_GEN_TABLES__C,                 \
+#define aes_gen_tables_enum               \
+  AES_GEN_TABLES__WORKGROUP_SIZE_X,       \
+  AES_GEN_TABLES__WORKGROUP_SIZE_Y,       \
+  AES_GEN_TABLES__PTR_WORKGROUP_SIZE_X,   \
+  AES_GEN_TABLES__PTR_WORKGROUP_SIZE_Y,   \
+  AES_GEN_TABLES__WORKGROUP_SIZE_X_Y,     \
+  AES_GEN_TABLES__LOCAL_INVOCATION_INDEX, \
+  AES_GEN_TABLES__ROTL_SL_1,              \
+  AES_GEN_TABLES__ROTL_SR_1,              \
+  AES_GEN_TABLES__C_1,                    \
+  AES_GEN_TABLES__PTR_AES_1_I,            \
+  AES_GEN_TABLES__ROTL_SL_2,              \
+  AES_GEN_TABLES__ROTL_SR_2,              \
+  AES_GEN_TABLES__C_2,                    \
+  AES_GEN_TABLES__PTR_AES_2_I,            \
+  AES_GEN_TABLES__ROTL_SL_3,              \
+  AES_GEN_TABLES__ROTL_SR_3,              \
+  AES_GEN_TABLES__C_3,                    \
+  AES_GEN_TABLES__PTR_AES_3_I,            \
+  AES_GEN_TABLES__LABEL_BEGIN,            \
+  AES_GEN_TABLES__LABEL_LOOP,             \
+  AES_GEN_TABLES__I,                      \
+  AES_GEN_TABLES__I_INC,                  \
+  AES_GEN_TABLES__LABEL_LOOP_COND,        \
+  AES_GEN_TABLES__LABEL_LOOP_BODY,        \
+  AES_GEN_TABLES__LABEL_LOOP_END,         \
+  AES_GEN_TABLES__SBOX0_PACKED_GIDX,      \
+  AES_GEN_TABLES__PTR_SBOX0_I,            \
+  AES_GEN_TABLES__SBOX0_I,                \
+  AES_GEN_TABLES__SBOX0_PACKED_LIDX,      \
+  AES_GEN_TABLES__SBOX0_PACKED_OFF,       \
+  AES_GEN_TABLES__X,                      \
+  AES_GEN_TABLES__X_SL_1,                 \
+  AES_GEN_TABLES__X_BIT7,                 \
+  AES_GEN_TABLES__X_MUL_WPOLY,            \
+  AES_GEN_TABLES__X_BIT7_SET,             \
+  AES_GEN_TABLES__X_A,                    \
+  AES_GEN_TABLES__X_B,                    \
+  AES_GEN_TABLES__C_8_16,                 \
+  AES_GEN_TABLES__C_8_16_24,              \
+  AES_GEN_TABLES__C,                      \
   AES_GEN_TABLES__PTR_AES_0_I
 
 #define aes_gen_tables_const0_rotate(c,nl,nr)                                    \
@@ -159,13 +165,25 @@
   (3 << 16) | OP_STORE, AES_GEN_TABLES__PTR_AES_##c##_I, AES_GEN_TABLES__C_##c
 
 #define aes_gen_tables                                                                         \
-  /* for (uint i = get_local_id(0); i < 256; i += get_local_size(0)) */                        \
+  (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_IN_UINT, AES_GEN_TABLES__PTR_WORKGROUP_SIZE_X,         \
+              WORKGROUP_SIZE, CONST_UINT_0,                                                    \
+  (4 << 16) | OP_LOAD, TYPE_UINT, AES_GEN_TABLES__WORKGROUP_SIZE_X,                            \
+              AES_GEN_TABLES__PTR_WORKGROUP_SIZE_X,                                            \
+  (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_IN_UINT, AES_GEN_TABLES__PTR_WORKGROUP_SIZE_Y,         \
+              WORKGROUP_SIZE, CONST_UINT_1,                                                    \
+  (4 << 16) | OP_LOAD, TYPE_UINT, AES_GEN_TABLES__WORKGROUP_SIZE_Y,                            \
+              AES_GEN_TABLES__PTR_WORKGROUP_SIZE_Y,                                            \
+  (5 << 16) | OP_IMUL, TYPE_UINT, AES_GEN_TABLES__WORKGROUP_SIZE_X_Y,                          \
+              AES_GEN_TABLES__WORKGROUP_SIZE_X, AES_GEN_TABLES__WORKGROUP_SIZE_Y,              \
+  (4 << 16) | OP_LOAD, TYPE_UINT, AES_GEN_TABLES__LOCAL_INVOCATION_INDEX,                      \
+              LOCAL_INVOCATION_INDEX,                                                          \
+  /* for (uint i = get_local_id(0); i < 256; i += get_local_size) */                           \
   (2 << 16) | OP_BRANCH, AES_GEN_TABLES__LABEL_BEGIN,                                          \
   (2 << 16) | OP_LABEL, AES_GEN_TABLES__LABEL_BEGIN,                                           \
   (2 << 16) | OP_BRANCH, AES_GEN_TABLES__LABEL_LOOP,                                           \
   (2 << 16) | OP_LABEL, AES_GEN_TABLES__LABEL_LOOP,                                            \
   (7 << 16) | OP_PHI, TYPE_UINT, AES_GEN_TABLES__I,                                            \
-              LOCAL_INVOCATION_X, AES_GEN_TABLES__LABEL_BEGIN,                                 \
+              AES_GEN_TABLES__LOCAL_INVOCATION_INDEX, AES_GEN_TABLES__LABEL_BEGIN,             \
               AES_GEN_TABLES__I_INC, AES_GEN_TABLES__LABEL_LOOP_BODY,                          \
   (5 << 16) | OP_ULESS_THAN, TYPE_BOOL, AES_GEN_TABLES__LABEL_LOOP_COND,                       \
               AES_GEN_TABLES__I, CONST_UINT_256,                                               \
@@ -218,7 +236,7 @@
   aes_gen_tables_const0_rotate(3,24,8),                                                        \
                                                                                                \
   (5 << 16) | OP_IADD, TYPE_UINT, AES_GEN_TABLES__I_INC,                                       \
-              AES_GEN_TABLES__I, CONST_UINT_8, /* ; i += local_size */                         \
+              AES_GEN_TABLES__I, AES_GEN_TABLES__WORKGROUP_SIZE_X_Y, /* ; i += local_size */   \
   (2 << 16) | OP_BRANCH, AES_GEN_TABLES__LABEL_LOOP,                                           \
   (2 << 16) | OP_LABEL, AES_GEN_TABLES__LABEL_LOOP_END
 
@@ -317,6 +335,7 @@
 #define aes_encode_10_enum             \
   FUNC_AES_ENCODE_10,                  \
   AES_ENCODE_10__ARG,                  \
+  AES_ENCODE_10__AES_KEY,              \
   AES_ENCODE_10__I,                    \
   AES_ENCODE_10__I_PLUS_0,             \
   AES_ENCODE_10__I_PLUS_1,             \
@@ -338,15 +357,17 @@
   AES_ENCODE_10__LABEL_LOOP_END,       \
   AES_ENCODE_10__XIN_AES_ROUND
 
-#define aes_encode_10_load_k(k)                                                                \
-  (5 << 16) | OP_IADD, TYPE_UINT, AES_ENCODE_10__I_PLUS_##k, AES_ENCODE_10__I, CONST_UINT_##k, \
-  (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_WG_UINT, AES_ENCODE_10__PTR_K_##k, AES_KEY,            \
-              AES_ENCODE_10__I_PLUS_##k,                                                       \
+#define aes_encode_10_load_k(k)                                                                   \
+  (5 << 16) | OP_IADD, TYPE_UINT, AES_ENCODE_10__I_PLUS_##k, AES_ENCODE_10__I, CONST_UINT_##k,    \
+  (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_FN_UINT, AES_ENCODE_10__PTR_K_##k, AES_ENCODE_10__AES_KEY,\
+              AES_ENCODE_10__I_PLUS_##k,                                                          \
   (4 << 16) | OP_LOAD, TYPE_UINT, AES_ENCODE_10__K_##k, AES_ENCODE_10__PTR_K_##k
 
 #define aes_encode_10_fn                                                                       \
-  (5 << 16) | OP_FUNCTION, TYPE_VOID, FUNC_AES_ENCODE_10, FNC_INLINE, TYPE_FUNC_VOID_UINT4,    \
+  (5 << 16) | OP_FUNCTION, TYPE_VOID, FUNC_AES_ENCODE_10, FNC_INLINE,                          \
+              TYPE_FUNC_VOID_UINT4_PTR_ARRAY_UINT_40,                                          \
   (3 << 16) | OP_FUNCTION_PARAMETER, TYPE_PTR_FN_UINT4, AES_ENCODE_10__ARG,                    \
+  (3 << 16) | OP_FUNCTION_PARAMETER, TYPE_PTR_FN_ARRAY_UINT_40, AES_ENCODE_10__AES_KEY,        \
   (2 << 16) | OP_LABEL, AES_ENCODE_10__LABEL,                                                  \
   (2 << 16) | OP_BRANCH, AES_ENCODE_10__LABEL_LOOP,                                            \
   (2 << 16) | OP_LABEL, AES_ENCODE_10__LABEL_LOOP,                                             \
@@ -386,8 +407,6 @@
 
 #define aes_expand_key_10_enum                  \
   AES_EXPAND_KEY_10__LABEL,                     \
-  AES_EXPAND_KEY_10__IDX00,                     \
-  AES_EXPAND_KEY_10__IDX0,                      \
   AES_EXPAND_KEY_10__LABEL_LOOP,                \
   AES_EXPAND_KEY_10__I,                         \
   AES_EXPAND_KEY_10__I_INC,                     \
@@ -437,20 +456,15 @@
 
 
 // expand AES-256 key to 10 round keys
-// AES_KEY should be in scope: shared uint[40]
+// AES_KEY should be in scope: private uint[40]
 // with first 8 bytes interpreted as AES-256 key
 #define aes_expand_key_10\
   (2 << 16) | OP_LABEL, AES_EXPAND_KEY_10__LABEL,                                              \
-  /* Make sure that only 1 local thread with id=0 will do the work */                          \
-  (5 << 16) | OP_SHIFT_LEFT_LOGICAL, TYPE_UINT, AES_EXPAND_KEY_10__IDX00,                      \
-              LOCAL_INVOCATION_X, CONST_UINT_8,                                                \
-  (5 << 16) | OP_IADD, TYPE_UINT, AES_EXPAND_KEY_10__IDX0,                                     \
-              AES_EXPAND_KEY_10__IDX00, CONST_UINT_8,                                          \
   /*  for (i = 8; i < 40; ++i) */                                                              \
   (2 << 16) | OP_BRANCH, AES_EXPAND_KEY_10__LABEL_LOOP,                                        \
   (2 << 16) | OP_LABEL, AES_EXPAND_KEY_10__LABEL_LOOP,                                         \
   (7 << 16) | OP_PHI, TYPE_UINT, AES_EXPAND_KEY_10__I,                                         \
-              AES_EXPAND_KEY_10__IDX0, AES_EXPAND_KEY_10__LABEL,                               \
+              CONST_UINT_8, AES_EXPAND_KEY_10__LABEL,                                          \
               AES_EXPAND_KEY_10__I_INC, AES_EXPAND_KEY_10__LABEL_LOOP_BODY,                    \
   (5 << 16) | OP_ULESS_THAN, TYPE_BOOL, AES_EXPAND_KEY_10__LOOP_COND,                          \
               AES_EXPAND_KEY_10__I, CONST_UINT_40, /* i < 40 ? */                              \
@@ -461,7 +475,7 @@
   (2 << 16) | OP_LABEL, AES_EXPAND_KEY_10__LABEL_LOOP_BODY,                                    \
   /* key[i - 1] */                                                                             \
   (5 << 16) | OP_ISUB, TYPE_UINT, AES_EXPAND_KEY_10__I_DEC, AES_EXPAND_KEY_10__I, CONST_UINT_1,\
-  (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_WG_UINT, AES_EXPAND_KEY_10__PTR_AES_KEY_I_SUB_1,       \
+  (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_FN_UINT, AES_EXPAND_KEY_10__PTR_AES_KEY_I_SUB_1,       \
               AES_KEY, AES_EXPAND_KEY_10__I_DEC,                                               \
   (4 << 16) | OP_LOAD, TYPE_UINT, AES_EXPAND_KEY_10__AES_KEY_I_SUB_1,                          \
               AES_EXPAND_KEY_10__PTR_AES_KEY_I_SUB_1,                                          \
@@ -509,13 +523,13 @@
   /* k[i] = k[i - 8] ^ z;*/                                                                    \
   (5 << 16) | OP_ISUB, TYPE_UINT, AES_EXPAND_KEY_10__I_SUB_8,                                  \
               AES_EXPAND_KEY_10__I, CONST_UINT_8,                                              \
-  (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_WG_UINT, AES_EXPAND_KEY_10__PTR_AES_KEY_I_SUB_8,       \
+  (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_FN_UINT, AES_EXPAND_KEY_10__PTR_AES_KEY_I_SUB_8,       \
               AES_KEY, AES_EXPAND_KEY_10__I_SUB_8,                                             \
   (4 << 16) | OP_LOAD, TYPE_UINT, AES_EXPAND_KEY_10__AES_KEY_I_SUB_8,                          \
               AES_EXPAND_KEY_10__PTR_AES_KEY_I_SUB_8,                                          \
   (5 << 16) | OP_BITWISE_XOR, TYPE_UINT, AES_EXPAND_KEY_10__AES_KEY_I,                         \
               AES_EXPAND_KEY_10__AES_KEY_I_SUB_8, AES_EXPAND_KEY_10__Z,                        \
-  (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_WG_UINT, AES_EXPAND_KEY_10__PTR_AES_KEY_I,             \
+  (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_FN_UINT, AES_EXPAND_KEY_10__PTR_AES_KEY_I,             \
               AES_KEY, AES_EXPAND_KEY_10__I,                                                   \
   (3 << 16) | OP_STORE, AES_EXPAND_KEY_10__PTR_AES_KEY_I, AES_EXPAND_KEY_10__AES_KEY_I,        \
   /* END */                                                                                    \

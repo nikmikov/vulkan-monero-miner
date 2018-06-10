@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <vulkan/vulkan.h>
 
 #include "crypto/cryptonight/cryptonight.h"
@@ -42,6 +43,7 @@ struct monero_solver_vk_context {
   VkBuffer buffer[NUM_BUFFERS];
   void *input_mmapped;
   void *output_mmapped;
+//  void *scratchpad_mmapped;
 
   // shaders
   VkCommandBuffer cmd_buffer;
@@ -63,6 +65,7 @@ struct monero_solver_vk {
 
   /** parallelizm */
   size_t parallelism;
+  size_t workgroups;
 
   /** Job params */
   const uint8_t *input_hash;
@@ -85,7 +88,7 @@ bool monero_solver_vk_context_prepare_buffers(
     struct monero_solver_vk_context *vk, size_t parallelism);
 
 bool monero_solver_vk_context_prepare_command_buffer(
-    struct monero_solver_vk_context *vk, size_t parallelism);
+    struct monero_solver_vk_context *vk, size_t workgroups);
 
 void monero_solver_vk_free(struct monero_solver *ptr)
 {
@@ -145,6 +148,7 @@ bool monero_solver_vk_set_job(struct monero_solver *ptr,
 
 int monero_solver_vk_process(struct monero_solver *ptr, uint32_t nonce_from)
 {
+  log_warn("new job");
   struct monero_solver_vk *solver = (struct monero_solver_vk *)ptr;
   struct monero_solver_vk_context *vk = solver->vk;
 
@@ -160,18 +164,28 @@ int monero_solver_vk_process(struct monero_solver *ptr, uint32_t nonce_from)
                               .signalSemaphoreCount = 0,
                               .pSignalSemaphores = NULL};
 
+  struct timespec tstart, tend;
+  clock_gettime(CLOCK_MONOTONIC, &tstart);
+
+  log_info("Queue submit: %lu hashes", solver->parallelism);
   VkResult vk_res = vkQueueSubmit(vk->queue, 1, &submit_info, vk->fence);
   if (vk_res != VK_SUCCESS) {
     log_error("Error when calling vkQueueSubmit");
     return -1;
   }
 
+  log_info("Wait for fences");
   vk_res = vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE, UINT64_MAX);
+  clock_gettime(CLOCK_MONOTONIC, &tend);
   if (vk_res != VK_SUCCESS) {
     log_error("Error when calling vkWaitForFences");
     return -1;
   }
 
+  double time_spent = ((double)tend.tv_sec + 1.0e-9 * tend.tv_nsec) -
+                      ((double)tstart.tv_sec + 1.0e-9 * tstart.tv_nsec);
+
+  log_info("Reset fences. Exec time: %f", time_spent);
   vk_res = vkResetFences(vk->device, 1, &vk->fence);
   if (vk_res != VK_SUCCESS) {
     log_error("Error when calling vkResetFences");
@@ -179,7 +193,7 @@ int monero_solver_vk_process(struct monero_solver *ptr, uint32_t nonce_from)
   }
 
   // read results and compare with CPU version of keccak
-#define __VERIFY_VK_
+//#define __VERIFY_VK_
 #ifdef __VERIFY_VK_
 
   struct cryptonight_ctx *cryptonight_ctx = cryptonight_ctx_new();
@@ -198,7 +212,7 @@ int monero_solver_vk_process(struct monero_solver *ptr, uint32_t nonce_from)
     print_debug("FINAL HASH CPU: ", &output_cpu, 200);
 
     uint8_t *output =
-      (uint8_t *)vk->output_mmapped + k * 200; //MONERO_CRYPTONIGHT_MEMORY;
+      (uint8_t *)vk->output_mmapped + k * 200; // MONERO_CRYPTONIGHT_MEMORY;
     print_debug("FINAL HASH VK:: ", output, 200);
 
     if (memcmp(output, &output_cpu, 200) != 0) {
@@ -218,8 +232,8 @@ monero_solver_new_vk(const struct monero_config_solver_vk *cfg)
 {
   ////////////////////////////// TEMORARY DEBUG ///////////////////////////
 #if 0
-  log_info("Dumping shader: %p: %lu", cryptonight_implode_shader,
-           cryptonight_implode_shader_size);
+//  log_info("Dumping shader: %p: %lu", cryptonight_init_shader,
+//           cryptonight_implode_shader_size);
   FILE *f = fopen("/home/fedor/src/dorenom/src/crypto/binary.spv", "w");
   fwrite((void *)cryptonight_implode_shader, 1, cryptonight_implode_shader_size,
          f);
@@ -238,8 +252,11 @@ monero_solver_new_vk(const struct monero_config_solver_vk *cfg)
     return NULL;
   }
 
+  size_t workgroups = cfg->parallelism / CRYPTONIGHT_SPV_LOCAL_WG_SIZE;
+  workgroups = workgroups == 0 ? 1 : workgroups;
+  size_t parallelism = workgroups * CRYPTONIGHT_SPV_LOCAL_WG_SIZE;
   // init memory buffers
-  if (!monero_solver_vk_context_prepare_buffers(vk_ctx, cfg->parallelism)) {
+  if (!monero_solver_vk_context_prepare_buffers(vk_ctx, parallelism)) {
     log_error("Error when initializing memory buffers");
     monero_solver_vk_context_release(vk_ctx);
     return NULL;
@@ -253,8 +270,7 @@ monero_solver_new_vk(const struct monero_config_solver_vk *cfg)
   }
 
   // init command buffer
-  if (!monero_solver_vk_context_prepare_command_buffer(vk_ctx,
-                                                       cfg->parallelism)) {
+  if (!monero_solver_vk_context_prepare_command_buffer(vk_ctx, workgroups)) {
     log_error("Error when initializing command buffers");
     monero_solver_vk_context_release(vk_ctx);
     return NULL;
@@ -264,7 +280,8 @@ monero_solver_new_vk(const struct monero_config_solver_vk *cfg)
       calloc(1, sizeof(struct monero_solver_vk));
 
   solver_vk->vk = vk_ctx;
-  solver_vk->parallelism = cfg->parallelism;
+  solver_vk->parallelism = parallelism;
+  solver_vk->workgroups = workgroups;
   solver_vk->solver.set_job = monero_solver_vk_set_job;
   solver_vk->solver.process = monero_solver_vk_process;
   solver_vk->solver.free = monero_solver_vk_free;
@@ -335,8 +352,13 @@ monero_solver_vk_context_init(uint32_t device_idx)
   log_info("Extensions: %u, layers: %u", enabled_extensions_count,
            enabled_layers_count);
   const VkApplicationInfo application_info = {
-      VK_STRUCTURE_TYPE_APPLICATION_INFO, 0, "MorBirMoneroSolver", 0, "", 0,
-      VK_MAKE_VERSION(1, 1, 76)};
+      VK_STRUCTURE_TYPE_APPLICATION_INFO,
+      0,
+      "MorBirMoneroSolver",
+      0,
+      "",
+      0,
+      VK_MAKE_VERSION(1, 1, 0)};
 
   const VkInstanceCreateInfo instance_create_info = {
       .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -588,8 +610,11 @@ bool monero_solver_vk_context_prepare_buffers(
   const VkMemoryPropertyFlags buffer_flags[NUM_BUFFERS] = {
       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+      //      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+      // VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+      //    VK_MEMORY_PROPERTY_HOST_COHERENT_BIT};
       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT};
 
   const VkBufferCreateInfo buffer_create_info[3] = {
@@ -663,6 +688,16 @@ bool monero_solver_vk_context_prepare_buffers(
               (int)vk_res);
     return false;
   }
+
+  /*
+  vk_res = vkMapMemory(vk->device, vk->memory[SCRATCHPAD_BUFFER], 0, VK_WHOLE_SIZE,
+                       0, &vk->scratchpad_mmapped);
+
+  if (vk_res != VK_SUCCESS) {
+    log_error("Error when calling vkMapMemory for output buffer: %d",
+              (int)vk_res);
+    return false;
+  }*/
 
   return true;
 }
@@ -862,7 +897,7 @@ bool monero_solver_vk_context_prepare_pipelines(
 }
 
 bool monero_solver_vk_context_prepare_command_buffer(
-    struct monero_solver_vk_context *vk, size_t parallelism)
+    struct monero_solver_vk_context *vk, size_t workgroups)
 {
   VkResult vk_res;
 
@@ -982,7 +1017,7 @@ bool monero_solver_vk_context_prepare_command_buffer(
                           vk->pipeline_layout[PIPELINE_INIT], 0, 1,
                           &vk->descriptor_set[PIPELINE_INIT], 0, 0);
 
-  vkCmdDispatch(vk->cmd_buffer, parallelism, 1, 1);
+  vkCmdDispatch(vk->cmd_buffer, workgroups, 1, 1);
 
   VkBufferMemoryBarrier state_buffer_init_barrier = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
@@ -1006,7 +1041,7 @@ bool monero_solver_vk_context_prepare_command_buffer(
                           vk->pipeline_layout[PIPELINE_KECCAK], 0, 1,
                           &vk->descriptor_set[PIPELINE_KECCAK], 0, 0);
 
-  vkCmdDispatch(vk->cmd_buffer, parallelism, 1, 1);
+  vkCmdDispatch(vk->cmd_buffer, workgroups, 1, 1);
 
   VkBufferMemoryBarrier state_buffer_keccak_barrier = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
@@ -1030,7 +1065,7 @@ bool monero_solver_vk_context_prepare_command_buffer(
                           vk->pipeline_layout[PIPELINE_EXPLODE], 0, 1,
                           &vk->descriptor_set[PIPELINE_EXPLODE], 0, 0);
 
-  vkCmdDispatch(vk->cmd_buffer, parallelism, 1, 1);
+  vkCmdDispatch(vk->cmd_buffer, workgroups, 1, 1);
 
   VkBufferMemoryBarrier scratchpad_buffer_explode_barrier = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
@@ -1054,7 +1089,7 @@ bool monero_solver_vk_context_prepare_command_buffer(
                           vk->pipeline_layout[PIPELINE_MEMLOOP], 0, 1,
                           &vk->descriptor_set[PIPELINE_MEMLOOP], 0, 0);
 
-  vkCmdDispatch(vk->cmd_buffer, parallelism, 1, 1);
+  vkCmdDispatch(vk->cmd_buffer, workgroups, 1, 1);
 
   VkBufferMemoryBarrier scratchpad_buffer_memloop_barrier = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
@@ -1078,7 +1113,7 @@ bool monero_solver_vk_context_prepare_command_buffer(
                           vk->pipeline_layout[PIPELINE_IMPLODE], 0, 1,
                           &vk->descriptor_set[PIPELINE_IMPLODE], 0, 0);
 
-  vkCmdDispatch(vk->cmd_buffer, parallelism, 1, 1);
+  vkCmdDispatch(vk->cmd_buffer, workgroups, 1, 1);
 
   vkCmdPipelineBarrier(vk->cmd_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL, 1,
@@ -1091,8 +1126,7 @@ bool monero_solver_vk_context_prepare_command_buffer(
                           vk->pipeline_layout[PIPELINE_KECCAK], 0, 1,
                           &vk->descriptor_set[PIPELINE_KECCAK], 0, 0);
 
-  vkCmdDispatch(vk->cmd_buffer, parallelism, 1, 1);
-
+  vkCmdDispatch(vk->cmd_buffer, workgroups, 1, 1);
 
   vk_res = vkEndCommandBuffer(vk->cmd_buffer);
 

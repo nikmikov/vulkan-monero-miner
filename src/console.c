@@ -2,6 +2,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #define ANSI_COLOR_RED "\x1b[31m"
 #define ANSI_COLOR_GREEN "\x1b[32m"
@@ -38,7 +39,15 @@ void console_log(enum log_level log_level, const char *logger_name,
     break;
   }
 
-  fprintf(stderr, "%s: ", logger_name);
+  char buff[20];
+  struct tm *sTm;
+
+  time_t now = time(0);
+  sTm = gmtime(&now);
+
+  strftime(buff, sizeof(buff), "%Y-%m-%d %H:%M:%S", sTm);
+
+  fprintf(stderr, "%s %s: ", buff, logger_name);
   va_list vargs;
   va_start(vargs, fmt);
   vfprintf(stderr, fmt, vargs);
