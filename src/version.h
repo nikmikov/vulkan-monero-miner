@@ -1,6 +1,6 @@
 #pragma once
 
-#define DORENOM_NAME "xmr-stack"
-#define DORENOM_VERSION "2.2.0-test"
+#define MORBIR_NAME "morbir"
+#define MORBIR_VERSION "0.1.0"
 
-#define VERSION_LONG DORENOM_NAME "/" DORENOM_VERSION
+#define VERSION_LONG MORBIR_NAME "/" MORBIR_VERSION

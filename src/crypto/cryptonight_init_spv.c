@@ -156,7 +156,7 @@ const uint32_t cryptonight_init_shader[] = {
   (7 << 16) | OP_BITFIELD_INSERT, TYPE_UINT, INPUT_W9_MOD, INPUT_W9, NONCE, CONST_UINT_24, CONST_UINT_8,
   (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_BF_UINT, PTR_HASH_STATE_W9, PTR_HASH_STATE, CONST_UINT_9,
   (3 << 16) | OP_STORE, PTR_HASH_STATE_W9, INPUT_W9_MOD,
-  // * 24 high bits of nonce into 24 low bits of word 10 of inpuit
+  // * 24 high bits of nonce into 24 low bits of word 10 of input
   (5 << 16) | OP_ACCESS_CHAIN, TYPE_PTR_BF_UINT, PTR_INPUT_W10, PTR_INPUT, CONST_UINT_10,
   (4 << 16) | OP_LOAD, TYPE_UINT, INPUT_W10, PTR_INPUT_W10,
   (5 << 16) | OP_SHIFT_RIGHT_LOGICAL, TYPE_UINT, NONCE_SR_8, NONCE, CONST_UINT_8,

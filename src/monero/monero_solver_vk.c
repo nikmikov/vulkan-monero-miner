@@ -193,7 +193,7 @@ int monero_solver_vk_process(struct monero_solver *ptr, uint32_t nonce_from)
   }
 
   // read results and compare with CPU version of keccak
-//#define __VERIFY_VK_
+#define __VERIFY_VK_
 #ifdef __VERIFY_VK_
 
   struct cryptonight_ctx *cryptonight_ctx = cryptonight_ctx_new();
@@ -235,7 +235,7 @@ monero_solver_new_vk(const struct monero_config_solver_vk *cfg)
 //  log_info("Dumping shader: %p: %lu", cryptonight_init_shader,
 //           cryptonight_implode_shader_size);
   FILE *f = fopen("/home/fedor/src/dorenom/src/crypto/binary.spv", "w");
-  fwrite((void *)cryptonight_implode_shader, 1, cryptonight_implode_shader_size,
+  fwrite((void *)cryptonight_memloop_shader, 1, cryptonight_memloop_shader_size,
          f);
   fclose(f);
   log_info("Wrote %lu, bytes", cryptonight_memloop_shader_size);
@@ -613,8 +613,8 @@ bool monero_solver_vk_context_prepare_buffers(
       //      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-      // VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-      //    VK_MEMORY_PROPERTY_HOST_COHERENT_BIT};
+      //      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+      //          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT};
       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT};
 
   const VkBufferCreateInfo buffer_create_info[3] = {
@@ -799,9 +799,10 @@ bool monero_solver_vk_context_prepare_pipelines(
       {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
        0}};
 
-  VkDescriptorSetLayoutBinding memloop_descriptor_set_layout_bindings[2] = {
+  VkDescriptorSetLayoutBinding memloop_descriptor_set_layout_bindings[3] = {
       {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, 0},
-      {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
+      {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, 0},
+      {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
        0}};
 
   VkDescriptorSetLayoutBinding implode_descriptor_set_layout_bindings[2] = {
@@ -817,7 +818,7 @@ bool monero_solver_vk_context_prepare_pipelines(
            keccak_descriptor_set_layout_bindings},
           {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, 0, 0, 2,
            explode_descriptor_set_layout_bindings},
-          {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, 0, 0, 2,
+          {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, 0, 0, 3,
            memloop_descriptor_set_layout_bindings},
           {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, 0, 0, 2,
            implode_descriptor_set_layout_bindings}};
@@ -902,11 +903,11 @@ bool monero_solver_vk_context_prepare_command_buffer(
   VkResult vk_res;
 
   VkDescriptorPoolSize descriptor_pool_size[NUM_COMPUTE_PIPELINES] = {
-      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2},
-      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
-      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2},
-      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2},
-      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2}};
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2},  // input
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},  // keccak
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2},  // explode
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3},  // memloop
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2}}; // implode
 
   VkDescriptorPoolCreateInfo descriptor_pool_create_info = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
@@ -974,17 +975,21 @@ bool monero_solver_vk_context_prepare_command_buffer(
 
   vkUpdateDescriptorSets(vk->device, 2, explode_write_descriptor_set, 0, NULL);
 
-  VkWriteDescriptorSet memloop_write_descriptor_set[2] = {
+  VkWriteDescriptorSet memloop_write_descriptor_set[3] = {
       {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL,
        vk->descriptor_set[PIPELINE_MEMLOOP], 0, 0, 1,
-       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[STATE_BUFFER],
+       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[INPUT_BUFFER],
        NULL},
       {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL,
        vk->descriptor_set[PIPELINE_MEMLOOP], 1, 0, 1,
+       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[STATE_BUFFER],
+       NULL},
+      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL,
+       vk->descriptor_set[PIPELINE_MEMLOOP], 2, 0, 1,
        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &buffer_desc[SCRATCHPAD_BUFFER],
        NULL}};
 
-  vkUpdateDescriptorSets(vk->device, 2, memloop_write_descriptor_set, 0, NULL);
+  vkUpdateDescriptorSets(vk->device, 3, memloop_write_descriptor_set, 0, NULL);
 
   VkWriteDescriptorSet implode_write_descriptor_set[2] = {
       {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL,
