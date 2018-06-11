@@ -136,18 +136,34 @@ static const struct test_vector CRYPTONIGHT_TEST_VECTORS[] = {
             "4dd4a4ed600010685402",
      .repeat = 0,
      .enc = ENC_HEX},
+    {.msg = "8519e039172b0d70e5ca7b3383d6b3167315a422747b73f019cf9528f0fde341fd"
+            "0f2a63030ba6450525cf6de31837669af6f1df8131faf50aaab8d3a7405589",
+     .repeat = 0,
+     .enc = ENC_HEX},
+    {.msg = "37a636d7dafdf259b7287eddca2f58099e98619d2f99bdb8969d7b14498102cc06"
+            "5201c8be90bd777323f449848b215d2977c92c4c1c2da36ab46b2e389689ed97c1"
+            "8fec08cd3b03235c5e4c62a37ad88c7b67932495a71090e85dd4020a9300",
+     .repeat = 0,
+     .enc = ENC_HEX},
+    {.msg = "38274c97c45a172cfc97679870422e3a1ab0784960c60514d816271415c306ee3a"
+            "3ed1a77e31f6a885c3cb",
+     .repeat = 0,
+     .enc = ENC_HEX},
 };
 
 static const char *CRYPTONIGHT_256_RESULTS[] = {
-    "eb14e8a833fac6fe9a43b57b336789c46ffe93f2868452240720607b14387e11",
-    "a084f01d1437a09c6985401b60d43554ae105802c5f5d8a9b3253649c0be6605",
-    "236ebffb019ea9b19c9ff160775bc7a6ed090fce7103a32ee582d24a81db6960",
-    "21fb4137747541810d5f8ce821b6dacf68eb3051778e68b5bcd990c21fa08fd6",
-    "bfabcc134608782e8f7322972dba801267f841535372741b554356045910f614",
-    "038228f36441187229333dd71d3f1b672335ec526d2101cc5fc700692c6aa9cb",
-    "5de3f18eff8271adbd3b9848b49d71230d696c7ba6c735554af8e15330ab881b",
-    "55b4a3163cb2b0720b3b83bee0067dd088891d7fa116fe4c7250f004011c2d99",
-    "c8dcfae5547a922eba99a65692636b2fd17745b62fddb588fe684ee2f80bd8fd"};
+    "1355425edbacc55ef903d5b3820fc4e50144aef34f9b39e56f4d21d928bfa10c",
+    "ed8cc757543d7177ea49203ac5e10ca382c9c1757dc4ce0d773a1e5e67c7c15f",
+    "04c86a155e5f23ccdf1426d39b886161ae0658f8c3ebd89964a45fd3dcb76493",
+    "421f2de3e71e3f6f348a59584bc01d5246924cbdd9ab5d67cd1472889c59510d",
+    "0975f309165f2dd320978becefce754e89fe6bbf14e17770af7c107520c3175f",
+    "a634ccbc972a6357af1dc0e029e214c69b99869f8254da410448ce3fd89d4db7",
+    "346bd7a82696129e7c091fd3972c950db4d12f035ea355011410b0921ad68a5e",
+    "37d00e0fd4aa5da7b7e300fa00da8f65cf08c7ad0463c318951e9732d6b27228",
+    "faf8d7e5434b42322b8f23976bb6488ec1ec1b6a37c63a1b7d850a84db89f834",
+    "5bb40c5880cef2f739bdb6aaaf16161eaae55530e7b10d7ea996b751a299e949",
+    "613e638505ba1fd05f428d5c9f8e08f8165614342dac419adc6a47dce257eb3e",
+    "ed082e49dbd5bbe34a3726a0d1dad981146062b39d36d62c71eb1ed8ab49459b"};
 
 void do_sha3(const void *msg, size_t msg_len, uint8_t *digest)
 {
@@ -270,6 +286,7 @@ int main(int argc, char **argv)
   failures += test_hash("Skein-512-256", SKEIN_256_RESULTS, do_skein);
   failures += test_hash("JH", JH_256_RESULTS, do_jh);
   failures += test_hash("Groestl", GROESTL_256_RESULTS, do_groestl);
+
   failures += test_cryptonight();
   if (failures > 0) {
     printf("FAILURE: Tests failed: %d\n", failures);

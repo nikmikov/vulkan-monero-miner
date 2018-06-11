@@ -213,6 +213,30 @@ void cn_implode_scratchpad(const __m128i *input, __m128i *output)
   _mm_store_si128(output + 11, xout7);
 }
 
+static inline uint64_t get_monero_tweak_const(const uint8_t *input,
+                                              const uint8_t *state)
+{
+  uint64_t inp = *((const uint64_t *)&input[35]);
+  uint64_t st = ((const uint64_t *)state)[24];
+  return  st ^ inp;
+}
+
+static inline void cryptonight_monero_tweak(uint64_t *mem_out, __m128i tmp)
+{
+  mem_out[0] = _mm_cvtsi128_si64(tmp);
+
+  tmp = _mm_castps_si128(
+      _mm_movehl_ps(_mm_castsi128_ps(tmp), _mm_castsi128_ps(tmp)));
+  uint64_t vh = _mm_cvtsi128_si64(tmp);
+
+  uint8_t x = (uint8_t)(vh >> 24);
+  static const uint16_t table = 0x7531;
+  const uint8_t index = (((x >> 3) & 6) | (x & 1)) << 1;
+  vh ^= ((table >> index) & 0x3) << 28;
+
+  mem_out[1] = vh;
+}
+
 void cryptonight_aesni(const uint8_t *input, size_t input_size,
                        struct cryptonight_hash *output,
                        struct cryptonight_ctx *ctx0)
@@ -223,6 +247,10 @@ void cryptonight_aesni(const uint8_t *input, size_t input_size,
 
   // init scratchpad
   keccak_256(ctx0->hash_state, 200, input, input_size);
+
+  // monero pow v7 const
+  const uint64_t monero_tweak_const =
+      get_monero_tweak_const(input, ctx0->hash_state);
 
   cn_explode_scratchpad((__m128i *)ctx0->hash_state,
                         (__m128i *)ctx0->long_state);
@@ -241,8 +269,10 @@ void cryptonight_aesni(const uint8_t *input, size_t input_size,
     cx = _mm_load_si128((__m128i *)&l0[idx0 & CRYPTONIGHT_MASK]);
     cx = aes_encode(cx, _mm_set_epi64x(ah0, al0));
 
-    _mm_store_si128((__m128i *)&l0[idx0 & CRYPTONIGHT_MASK],
-                    _mm_xor_si128(bx0, cx));
+    // new in monero pow v7
+    cryptonight_monero_tweak((uint64_t *)&l0[idx0 & CRYPTONIGHT_MASK],
+                             _mm_xor_si128(bx0, cx));
+
     idx0 = _mm_cvtsi128_si64(cx);
     bx0 = cx;
 
@@ -255,7 +285,7 @@ void cryptonight_aesni(const uint8_t *input, size_t input_size,
     al0 += hi;
     ah0 += lo;
     ((uint64_t *)&l0[idx0 & CRYPTONIGHT_MASK])[0] = al0;
-    ((uint64_t *)&l0[idx0 & CRYPTONIGHT_MASK])[1] = ah0;
+    ((uint64_t *)&l0[idx0 & CRYPTONIGHT_MASK])[1] = ah0 ^ monero_tweak_const;
     ah0 ^= ch;
     al0 ^= cl;
     idx0 = al0;
