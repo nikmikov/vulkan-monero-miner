@@ -8,8 +8,13 @@
 #include <time.h>
 #include <vulkan/vulkan.h>
 
+#include "crypto/blake.h"
 #include "crypto/cryptonight/cryptonight.h"
 #include "crypto/cryptonight_spv.h"
+#include "crypto/groestl.h"
+#include "crypto/jh.h"
+#include "crypto/skein.h"
+
 #include "logging.h"
 #include "utils/unused.h"
 
@@ -43,7 +48,7 @@ struct monero_solver_vk_context {
   VkBuffer buffer[NUM_BUFFERS];
   void *input_mmapped;
   void *output_mmapped;
-//  void *scratchpad_mmapped;
+  //  void *scratchpad_mmapped;
 
   // shaders
   VkCommandBuffer cmd_buffer;
@@ -74,6 +79,10 @@ struct monero_solver_vk {
   uint8_t *output_hash;
   uint32_t *output_nonces;
   size_t *output_num;
+
+  /** cryptonight context */
+  struct cryptonight_ctx *cryptonight_ctx;
+  struct cryptonight_hash cryptonight_output_hash;
 };
 
 struct monero_solver_vk_context *
@@ -167,7 +176,7 @@ int monero_solver_vk_process(struct monero_solver *ptr, uint32_t nonce_from)
   struct timespec tstart, tend;
   clock_gettime(CLOCK_MONOTONIC, &tstart);
 
-  log_info("Queue submit: %lu hashes", solver->parallelism);
+  log_info("Queue submit: %lu hashes, start nonce: %x", solver->parallelism, nonce_from);
   VkResult vk_res = vkQueueSubmit(vk->queue, 1, &submit_info, vk->fence);
   if (vk_res != VK_SUCCESS) {
     log_error("Error when calling vkQueueSubmit");
@@ -192,37 +201,47 @@ int monero_solver_vk_process(struct monero_solver *ptr, uint32_t nonce_from)
     return -1;
   }
 
-  // read results and compare with CPU version of keccak
-#define __VERIFY_VK_
-#ifdef __VERIFY_VK_
+  static void (*const extra_hashes[4])(const void *, size_t, uint8_t *) = {
+      blake_256, groestl_256, jh_256, skein_512_256};
 
-  struct cryptonight_ctx *cryptonight_ctx = cryptonight_ctx_new();
-  struct cryptonight_hash output_cpu;
+  uint8_t output[256];
+  *solver->output_num = 0;
 
-  log_debug("Verifying results");
-  for (size_t k = 0; k < solver->parallelism; ++k) {
+  for (size_t i = 0; i < solver->parallelism; ++i) {
+    uint8_t *hash_state =
+        ((uint8_t *)vk->output_mmapped) + i * CRYPTONIGHT_STATE_SIZE;
 
-    *(uint32_t *)&solver->input_hash[MONERO_NONCE_POSITION] = nonce_from + k;
-    //    keccak_256(keccak_state, CRYPTONIGHT_STATE_SIZE, solver->input_hash,
-    //               solver->input_hash_len);
+    const int final_hash_idx = hash_state[0] & 3;
+    extra_hashes[final_hash_idx](hash_state, CRYPTONIGHT_STATE_SIZE * 8,
+                                 output);
 
-    cryptonight_aesni(solver->input_hash, solver->input_hash_len, &output_cpu,
-                      cryptonight_ctx);
-
-    print_debug("FINAL HASH CPU: ", &output_cpu, 200);
-
-    uint8_t *output =
-      (uint8_t *)vk->output_mmapped + k * 200; // MONERO_CRYPTONIGHT_MEMORY;
-    print_debug("FINAL HASH VK:: ", output, 200);
-
-    if (memcmp(output, &output_cpu, 200) != 0) {
-      log_error("Don't match: %lu", k);
-    } else {
-      log_info("Match: %lu", k);
+    if (monero_solution_hash_val(output) < solver->target) {
+      uint32_t nonce = nonce_from + (uint32_t)i;
+      log_debug("Solution found: %x : %u!", nonce, *solver->output_num);
+      // solution found
+      memcpy(solver->output_hash, output, MONERO_OUTPUT_HASH_LEN);
+      solver->output_nonces[*solver->output_num] = nonce;
+      ++(*solver->output_num);
     }
-  }
-  exit(1);
+
+//#define __VERIFY_VK_
+#ifdef __VERIFY_VK_
+    log_debug("Verifying results");
+    *(uint32_t *)&solver->input_hash[MONERO_NONCE_POSITION] = nonce_from + i;
+    cryptonight_aesni(solver->input_hash, solver->input_hash_len,
+                      &solver->cryptonight_output_hash,
+                      solver->cryptonight_ctx);
+//    print_debug("FINAL HASH VK:: ", output, 32);
+//    print_debug("FINAL HASH CPU: ", &solver->cryptonight_output_hash, 32);
+    if (memcmp(output, &solver->cryptonight_output_hash, 32) != 0) {
+      log_error("Don't match: %lu", i);
+      exit(1);
+    } else {
+      // log_info("Match: %lu", i);
+    }
 #endif
+
+  }
 
   return solver->parallelism;
 }
@@ -279,6 +298,7 @@ monero_solver_new_vk(const struct monero_config_solver_vk *cfg)
   struct monero_solver_vk *solver_vk =
       calloc(1, sizeof(struct monero_solver_vk));
 
+  solver_vk->cryptonight_ctx = cryptonight_ctx_new();
   solver_vk->vk = vk_ctx;
   solver_vk->parallelism = parallelism;
   solver_vk->workgroups = workgroups;
@@ -690,8 +710,8 @@ bool monero_solver_vk_context_prepare_buffers(
   }
 
   /*
-  vk_res = vkMapMemory(vk->device, vk->memory[SCRATCHPAD_BUFFER], 0, VK_WHOLE_SIZE,
-                       0, &vk->scratchpad_mmapped);
+  vk_res = vkMapMemory(vk->device, vk->memory[SCRATCHPAD_BUFFER], 0,
+  VK_WHOLE_SIZE, 0, &vk->scratchpad_mmapped);
 
   if (vk_res != VK_SUCCESS) {
     log_error("Error when calling vkMapMemory for output buffer: %d",
