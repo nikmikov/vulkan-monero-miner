@@ -1,4 +1,4 @@
-# dorenom
+# vulkan-monero
 
 
 ## System Requirements
